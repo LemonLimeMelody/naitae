@@ -2,5 +2,19 @@ package com.naitae.connect.app
 
 import android.app.Application
 
-/** 구현 예정: app 담당 (AppContainer 를 만들어 들고 있음) */
-class NaitaeApp : Application()
+/**
+ * 앱 프로세스. AppContainer 를 한 번 만들어 들고 있고, 코디네이터가 차의 신호를 듣기 시작하게 한다.
+ */
+class NaitaeApp : Application() {
+
+    lateinit var container: AppContainer
+        private set
+
+    override fun onCreate() {
+        super.onCreate()
+        container = AppContainer(this)
+        container.coordinator.start()
+        // 실제 차에서는 화면이 앞에 없어도 시동 신호를 받도록 지켜보는 서비스를 띄운다. 시뮬레이터에는 필요 없다.
+        if (container.isPleos) VehicleWatchService.start(this)
+    }
+}

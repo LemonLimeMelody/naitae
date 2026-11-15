@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">나이테</string>
+
+    <!-- 차의 신호를 지켜보는 서비스의 알림 -->
+    <string name="watch_channel_name">차 신호 지켜보기</string>
+    <string name="watch_channel_description">시동을 걸면 오늘 일정과 메모를 알려 드리려고 차의 신호를 지켜봅니다.</string>
+    <string name="watch_notification_title">나이테가 차와 연결되어 있어요</string>
+    <string name="watch_notification_text">시동을 걸면 오늘 일정과 메모를 알려 드려요.</string>
 </resources>

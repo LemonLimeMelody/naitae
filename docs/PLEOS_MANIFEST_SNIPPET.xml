@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Pleos 어댑터(vehicle/pleos/**)가 필요로 하는 AndroidManifest.xml 항목.
+  app 담당이 app/src/main/AndroidManifest.xml 의 같은 위치에 병합한다.
+  권한 이름과 보호 수준은 SDK AAR 의 어노테이션(javap -v)과 공식 문서로 확인했다. 근거 정리: docs/PLEOS_NOTES.md 1절.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ───────── Vehicle SDK (보호 수준 normal: 선언만 하면 됨) ───────── -->
+
+    <!-- 기어(P 여부·주행 중 판단)와 누적 주행거리 읽기: Gear.*, Odometer.* -->
+    <uses-permission android:name="pleos.car.permission.CAR_DRIVE" />
+    <!-- 차대번호(VIN) 읽기 → 새 차 이어받기: CarInfo.getVINInfo -->
+    <uses-permission android:name="pleos.car.permission.CAR_INFO" />
+    <!-- 좌석 착석 여부(동승 여부), 시트 열선 범위·현재 단계 읽기: Seat.getCurrentSeatOccupancy 등 -->
+    <uses-permission android:name="pleos.car.permission.CAR_SEATS" />
+    <!-- 운전석 시트 열선 켜기(미래 편지 연출): Seat.setHvacSeatTemperature -->
+    <uses-permission android:name="pleos.car.permission.CONTROL_CAR_SEATS" />
+    <!-- 앰비언트 라이트 지원 영역·범위·현재 색/밝기 읽기: Light.checkAmbientLight…, getAmbientLight… -->
+    <uses-permission android:name="pleos.car.permission.CAR_LIGHTS" />
+    <!-- 앰비언트 라이트 색·밝기 바꾸기(기록의 색, 편지 연출): Light.setAmbientLight… — 문서에는 CAR_LIGHTS 로 적혀 있지만 SDK 구현(LightImpl)이 실행 중에 이 권한을 검사한다 -->
+    <uses-permission android:name="pleos.car.permission.CONTROL_CAR_LIGHTS" />
+    <!-- 공조 온도·풍량·핸들 열선의 범위와 현재 값 읽기: HVAC.checkHvac…, SteeringWheel.checkHvacSteeringWheelHeat… -->
+    <uses-permission android:name="pleos.car.permission.CAR_CLIMATE" />
+    <!-- 공조 온도·풍량·전원, 핸들 열선 바꾸기(편지 연출): HVAC.setHvac…, SteeringWheel.setHvacSteeringWheelHeat -->
+    <uses-permission android:name="pleos.car.permission.CONTROL_CAR_CLIMATE" />
+
+    <!-- ───────── NaviHelper SDK (보호 수준 normal) ───────── -->
+
+    <!-- 즐겨찾기와 현재 목적지 조회(도착 좌표 확보): NaviHelper.getBookmarkInfo, getDestinationInfo -->
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" />
+    <!-- "○○로 안내할까요?"에 답했을 때 길 안내 요청: NaviHelper.requestRoute -->
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE_SEARCH" />
+
+    <!-- ───────── 음성 SDK ───────── -->
+
+    <!-- 브리핑·메모·편지 낭독: TextToSpeech 전체 API -->
+    <uses-permission android:name="pleos.car.permission.TTS_SERVICE" />
+    <!-- 말로 메모·한마디 받기: SpeechToText 전체 API (마이크는 음성 서비스가 연다) -->
+    <uses-permission android:name="pleos.car.permission.STT_SERVICE" />
+
+    <!-- ───────── FusedLocation SDK ───────── -->
+
+    <!-- 장소 메모의 근접 알림: FusedLocation.addProximityAlert / removeProximityAlert. 보호 수준 dangerous → 액티비티에서 실행 중 권한 요청도 해야 한다(PleosPlatform.runtimePermissions) -->
+    <uses-permission android:name="pleos.car.permission.FUSED_LOCATION" />
+
+    <!-- ───────── 기기 특성 ───────── -->
+
+    <!-- FusedLocation AAR 이 required="true" 로 병합하는 것을 false 로 바꾼다: 일반 휴대폰·에뮬레이터에도 설치해 시뮬레이터로 실행하기 위해서다 -->
+    <uses-feature
+        android:name="android.hardware.type.automotive"
+        android:required="false"
+        tools:node="replace" />
+
+    <!-- ───────── 패키지 조회(Android 11 이상) ───────── -->
+
+    <queries>
+        <!-- Pleos Vehicle 서비스가 있는지 확인(PleosPlatform.createOrNull 의 실행 환경 판단). Vehicle AAR 도 같은 항목을 병합하지만 판단이 여기에 달려 있어 명시한다 -->
+        <intent>
+            <action android:name="ai.pleos.playground.vehicle.VEHICLE_START" />
+        </intent>
+        <!-- 위와 같은 판단에서 서비스 패키지를 지정해 조회한다 -->
+        <package android:name="ai.pleos.playground.service.vehicle" />
+    </queries>
+
+    <!--
+      아래는 SDK AAR 의 매니페스트가 자동으로 병합하므로 앱 매니페스트에 쓰지 않는다(확인용).
+        - Vehicle       : uses-permission ai.pleos.playground.service.vehicle.VEHICLE_BINDING
+        - FusedLocation : uses-permission ai.pleos.playground.service.location.fused.FUSED_LOCATION_BINDING,
+                          queries package ai.pleos.playground.service.location.fused
+        - NaviHelper    : queries intent ai.pleos.playground.intent.action.NAVI_START
+        - TTS / STT     : uses-permission android.permission.INTERNET,
+                          queries intent ai.pleos.playground.caas.intent.action.SPEECH_START
+        - meta-data     : 각 SDK 의 최소 서비스 버전·SDK 버전(ai.pleos.playground.service.vehicle.min_version_name 등)은
+                          AAR 이 <application> 안에 넣어 준다. 이 어댑터가 따로 요구하는 meta-data 는 없다.
+    -->
+
+</manifest>

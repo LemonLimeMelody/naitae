@@ -1,0 +1,9 @@
+<resources>
+    <!-- 앱 아이콘: 부드러운 바탕 위의 호박색 나이테 (ui/theme/Theme.kt 의 Soft · Ring2 · Amber · AmberInk · Navy 와 같은 값) -->
+    <color name="icon_background">#FBEBD3</color>
+    <color name="icon_ring_faint">#F5D7A9</color>
+    <color name="icon_ring">#D98E2B</color>
+    <color name="icon_ring_light">#E3A650</color>
+    <color name="icon_ring_deep">#A9651A</color>
+    <color name="icon_scene_dot">#16324F</color>
+</resources>

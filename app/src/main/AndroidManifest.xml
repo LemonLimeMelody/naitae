@@ -1,21 +1,123 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+        차량용 기기가 아니어도 설치·실행된다(Pleos 서비스가 없으면 시뮬레이터로 돈다).
+        FusedLocation SDK 의 매니페스트가 이 기능을 required=true 로 병합하므로(docs/PLEOS_NOTES.md 1.2절)
+        여기서 false 로 덮어쓴다.
+    -->
+    <uses-feature
+        android:name="android.hardware.type.automotive"
+        android:required="false"
+        tools:replace="android:required" />
+
+    <!-- Pleos Connect SDK 권한 (근거: docs/PLEOS_MANIFEST_SNIPPET.xml, docs/PLEOS_NOTES.md 1절) -->
+    <!-- ───────── Vehicle SDK (보호 수준 normal: 선언만 하면 됨) ───────── -->
+
+    <!-- 기어(P 여부·주행 중 판단)와 누적 주행거리 읽기: Gear.*, Odometer.* -->
+    <uses-permission android:name="pleos.car.permission.CAR_DRIVE" />
+    <!-- 차대번호(VIN) 읽기 → 새 차 이어받기: CarInfo.getVINInfo -->
+    <uses-permission android:name="pleos.car.permission.CAR_INFO" />
+    <!-- 좌석 착석 여부(동승 여부), 시트 열선 범위·현재 단계 읽기: Seat.getCurrentSeatOccupancy 등 -->
+    <uses-permission android:name="pleos.car.permission.CAR_SEATS" />
+    <!-- 운전석 시트 열선 켜기(미래 편지 연출): Seat.setHvacSeatTemperature -->
+    <uses-permission android:name="pleos.car.permission.CONTROL_CAR_SEATS" />
+    <!-- 앰비언트 라이트 지원 영역·범위·현재 색/밝기 읽기: Light.checkAmbientLight…, getAmbientLight… -->
+    <uses-permission android:name="pleos.car.permission.CAR_LIGHTS" />
+    <!-- 앰비언트 라이트 색·밝기 바꾸기(기록의 색, 편지 연출): Light.setAmbientLight… — 문서에는 CAR_LIGHTS 로 적혀 있지만 SDK 구현(LightImpl)이 실행 중에 이 권한을 검사한다 -->
+    <uses-permission android:name="pleos.car.permission.CONTROL_CAR_LIGHTS" />
+    <!-- 공조 온도·풍량·핸들 열선의 범위와 현재 값 읽기: HVAC.checkHvac…, SteeringWheel.checkHvacSteeringWheelHeat… -->
+    <uses-permission android:name="pleos.car.permission.CAR_CLIMATE" />
+    <!-- 공조 온도·풍량·전원, 핸들 열선 바꾸기(편지 연출): HVAC.setHvac…, SteeringWheel.setHvacSteeringWheelHeat -->
+    <uses-permission android:name="pleos.car.permission.CONTROL_CAR_CLIMATE" />
+
+    <!-- ───────── NaviHelper SDK (보호 수준 normal) ───────── -->
+
+    <!-- 즐겨찾기와 현재 목적지 조회(도착 좌표 확보): NaviHelper.getBookmarkInfo, getDestinationInfo -->
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" />
+    <!-- "○○로 안내할까요?"에 답했을 때 길 안내 요청: NaviHelper.requestRoute -->
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE_SEARCH" />
+
+    <!-- ───────── 음성 SDK ───────── -->
+
+    <!-- 브리핑·메모·편지 낭독: TextToSpeech 전체 API -->
+    <uses-permission android:name="pleos.car.permission.TTS_SERVICE" />
+    <!-- 말로 메모·한마디 받기: SpeechToText 전체 API (마이크는 음성 서비스가 연다) -->
+    <uses-permission android:name="pleos.car.permission.STT_SERVICE" />
+
+    <!-- ───────── FusedLocation SDK ───────── -->
+
+    <!-- 장소 메모의 근접 알림: FusedLocation.addProximityAlert / removeProximityAlert. 보호 수준 dangerous → 액티비티에서 실행 중 권한 요청도 해야 한다(PleosPlatform.runtimePermissions) -->
+    <uses-permission android:name="pleos.car.permission.FUSED_LOCATION" />
+
+    <!-- 차의 신호를 지켜보는 포그라운드 서비스(VehicleWatchService)와 그 알림 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <queries>
+        <!-- Pleos Vehicle 서비스가 있는지 확인(PleosPlatform.createOrNull 의 실행 환경 판단) -->
+        <intent>
+            <action android:name="ai.pleos.playground.vehicle.VEHICLE_START" />
+        </intent>
+        <package android:name="ai.pleos.playground.service.vehicle" />
+        <!-- 시뮬레이터가 기기의 합성 음성으로 소리 내어 읽을 때 음성 엔진을 찾는 데 필요 (docs/requests/sim.md 1번) -->
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
 
     <application
         android:name=".app.NaitaeApp"
         android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Naitae">
+
+        <!-- 로터리(CCP) 조작은 지원하지 않고 모든 조작을 터치와 음성으로 끝낸다 (docs/PLEOS_NOTES.md 1.3절) -->
+        <meta-data
+            android:name="com.hmg.rotary.ROTARY_SUPPORTED"
+            android:value="false" />
+
+        <!--
+            런처에 보이는 하나뿐인 화면: MAIN + LAUNCHER (docs/PLEOS_NOTES.md 1.3절 '런처').
+            가로 화면으로 고정한다(같은 절 'screenOrientation': landscape = 창 2개 영역).
+        -->
         <activity
             android:name=".app.MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
             android:exported="true"
-            android:screenOrientation="landscape"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode">
+            android:launchMode="singleTop"
+            android:screenOrientation="landscape">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!--
+                주행 중에도 쓸 수 있는 화면이라고 선언한다(AAOS 표준 문법, docs/PLEOS_NOTES.md 1.3절 'DO 선언 문법').
+                선언하지 않으면 Drive 상태에서 앱을 쓸 수 없다. 주행 중에는 화면 입력을 잠그고 음성만 쓴다.
+            -->
+            <meta-data
+                android:name="distractionOptimized"
+                android:value="true" />
         </activity>
+
+        <!--
+            차량 신호 구독을 살려 두는 서비스. 밖에서 부를 일이 없어 exported=false (docs/PLEOS_NOTES.md 1.3절 '컴포넌트 노출').
+            API 34 는 포그라운드 서비스 유형이 필수다. 마이크·위치는 Pleos 서비스가 열기 때문에 specialUse 로 선언하고
+            쓰임새를 아래 property 에 적는다.
+        -->
+        <service
+            android:name=".app.VehicleWatchService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="vehicle_signal_watch: 시동·기어 등 차량 신호 구독을 유지해 하루 첫 시동에 일정·메모 브리핑을 시작" />
+        </service>
     </application>
 </manifest>
