@@ -59,6 +59,23 @@ internal fun topicAccent(scene: SceneKind?): Color =
 
 private const val CaretId = "naitae-caret"
 
+/** 붙여 쓴 글자 사이에 넣어 그 자리에서 줄이 바뀌지 않게 하는, 폭이 없는 문자(WORD JOINER) */
+private const val WORD_JOINER = '\u2060'
+
+/**
+ * 한글은 글자마다 줄을 바꿀 수 있어 "아빠 / 가," 처럼 낱말 가운데에서 끊긴다.
+ * 낱말 안의 글자 사이를 이어 붙여 띄어쓰기에서만 줄이 바뀌게 한다(큰 글씨로 읽는 편지 글에 쓴다).
+ */
+internal fun keepWordsTogether(text: String): String {
+    if (text.length < 2) return text
+    val out = StringBuilder(text.length * 2)
+    for ((index, ch) in text.withIndex()) {
+        if (index > 0 && !ch.isWhitespace() && !text[index - 1].isWhitespace()) out.append(WORD_JOINER)
+        out.append(ch)
+    }
+    return out.toString()
+}
+
 /**
  * 받아 적히는 글자. typing 이면 끝에 깜빡이는 막대를 붙인다.
  * 막대는 글꼴에 없는 기호일 수 있어 글자 대신 그려 넣는다.

@@ -165,10 +165,13 @@ internal fun FrameTopBar(
                     color = sub,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
+                    // 남는 너비를 모두 차지해 시계와 기어를 오른쪽 끝으로 민다
+                    // (fill = false 인 칸과 Spacer 가 너비를 반씩 나눠 가지면 시계가 가운데에 떠 버린다).
+                    modifier = Modifier.weight(1f),
                 )
+            } else {
+                Spacer(Modifier.weight(1f))
             }
-            Spacer(Modifier.weight(1f))
             if (clockLabel.isNotBlank()) {
                 Text(clockLabel, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = sub, maxLines = 1)
                 Spacer(Modifier.width(12.dp))

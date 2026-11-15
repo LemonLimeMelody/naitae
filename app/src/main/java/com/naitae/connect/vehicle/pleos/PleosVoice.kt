@@ -20,6 +20,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
@@ -220,6 +221,13 @@ internal class PleosVoiceInput(private val context: Context) : VoiceInput {
     private class Listening {
         val finished = CompletableDeferred<VoiceResult>()
 
+        /** 말이 끝났다는 이벤트(onEndedRecognition)가 왔다. 최종 결과(onUpdated 완료)가 뒤따를 수 있어 바로 끝내지 않는다. */
+        val ended = CompletableDeferred<Unit>()
+
+        /** 이번 듣기에서 SDK 이벤트(onReady · onStartedRecognition · onUpdated)를 하나라도 받았다. */
+        @Volatile
+        var opened = false
+
         @Volatile
         var lastText = ""
 
@@ -231,14 +239,17 @@ internal class PleosVoiceInput(private val context: Context) : VoiceInput {
     private val listener = object : ResultListener {
         override fun onReady() {
             SdkLog.event("SpeechToText.onReady")
+            current?.opened = true
         }
 
         override fun onStartedRecognition() {
             SdkLog.event("SpeechToText.onStartedRecognition")
+            current?.opened = true
         }
 
         override fun onUpdated(stt: String, completed: Boolean) {
             val listening = current ?: return
+            listening.opened = true
             val text = stt.trim()
             if (text.isNotEmpty()) {
                 listening.lastText = text
@@ -256,7 +267,9 @@ internal class PleosVoiceInput(private val context: Context) : VoiceInput {
 
         override fun onEndedRecognition() {
             SdkLog.event("SpeechToText.onEndedRecognition")
-            current?.finishWithHeard()
+            // 앞선 듣기를 닫으며(stop) 뒤늦게 온 종료 이벤트가 이번 듣기를 끝내지 않도록, 이번 듣기의 이벤트를 받은 뒤의 것만 받는다.
+            val listening = current ?: return
+            if (listening.opened) listening.ended.complete(Unit)
         }
 
         override fun onError(errorType: SttErrorType) {
@@ -283,9 +296,20 @@ internal class PleosVoiceInput(private val context: Context) : VoiceInput {
         try {
             stt.request()
             SdkLog.api("SpeechToText.request() · ON_DEVICE · ko-KR")
-            var result = withTimeoutOrNull(timeoutMs.coerceAtLeast(1_000L)) { listening.finished.await() }
-            if (result == null && listening.lastText.isNotEmpty()) {
-                result = withTimeoutOrNull(FINISH_GRACE_MS) { listening.finished.await() }
+            var result = withTimeoutOrNull(timeoutMs.coerceAtLeast(1_000L)) {
+                select<VoiceResult?> {
+                    listening.finished.onAwait { it }
+                    listening.ended.onAwait { null }
+                }
+            }
+            if (result == null) {
+                // 말 끝 이벤트가 최종 결과보다 먼저 올 수 있어 잠깐 더 기다린다. 말하는 중에 시간이 다 됐으면 끝맺을 시간을 준다.
+                val graceMs = when {
+                    listening.ended.isCompleted -> END_GRACE_MS
+                    listening.lastText.isNotEmpty() -> FINISH_GRACE_MS
+                    else -> 0L
+                }
+                if (graceMs > 0L) result = withTimeoutOrNull(graceMs) { listening.finished.await() }
             }
             val heard = result
                 ?: if (listening.lastText.isNotEmpty()) VoiceResult.Text(listening.lastText) else VoiceResult.NoSpeech
@@ -370,5 +394,8 @@ internal class PleosVoiceInput(private val context: Context) : VoiceInput {
 
     private companion object {
         const val FINISH_GRACE_MS = 4_000L
+
+        /** 말 끝 이벤트 뒤에 최종 결과를 기다리는 시간 */
+        const val END_GRACE_MS = 1_500L
     }
 }

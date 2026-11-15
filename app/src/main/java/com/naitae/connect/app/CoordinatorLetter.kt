@@ -99,9 +99,19 @@ internal fun NaitaeCoordinator.endLetter(letter: FutureLetter, running: Job?, ke
     val today = today()
     launchCommand {
         if (running != null) withTimeoutOrNull(PERFORM_STOP_WAIT_MS) { running.join() }
-        performer.finish(keepLight)
+        // keepLight(새 차 첫 시동의 편지): 이어받기 화면이 보이는 동안은 보랏빛을 그대로 둔다.
+        // 편지 전 조명의 기억은 버리지 않고 두었다가 이어받기 화면을 떠날 때(releaseLetterLight) 되돌린다.
+        if (!keepLight) performer.finish()
         repository.update { LetterEngine.markOpened(it, letter.id, today) }
     }
+}
+
+/**
+ * 이어받기 화면을 떠날 때(나이테 보기·출발·시동 끔): 편지가 남겨 둔 보랏빛을 편지 전 조명으로 되돌린다.
+ * 남겨 둔 것이 없으면 아무 일도 하지 않는다. 온기는 그대로 둔다.
+ */
+internal fun NaitaeCoordinator.releaseLetterLight() {
+    launchCommand { performer.finish() }
 }
 
 private const val REVEAL_MS_PER_CHAR = 60L

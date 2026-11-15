@@ -32,7 +32,26 @@ android {
     buildFeatures { compose = true }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.15" }   // Kotlin 1.9.25 대응
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
-    testOptions { unitTests.isReturnDefaultValues = true }
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
+            // Robolectric 이 병합된 매니페스트·리소스를 읽어 실제 NaitaeApp·MainActivity 를 JVM 에서 띄운다.
+            isIncludeAndroidResources = true
+            all { test ->
+                test.maxHeapSize = "3g"
+                test.jvmArgs("-Dfile.encoding=UTF-8")
+                // e2e 화면 캡처는 디버그 단위 테스트에서만 docs/screenshots 에 남긴다(릴리스에서는 건너뜀).
+                if (test.name == "testDebugUnitTest") {
+                    val shots = rootProject.file("docs/screenshots")
+                    test.systemProperty("roborazzi.test.record", "true")
+                    test.systemProperty("naitae.screenshot.dir", shots.absolutePath)
+                    // 캡처도 이 작업의 결과물이다(지우면 다시 돈다). 빌드 캐시가 문서 폴더를 덮어쓰지 않게 캐시는 쓰지 않는다.
+                    test.outputs.dir(shots)
+                    test.outputs.cacheIf { false }
+                }
+            }
+        }
+    }
 }
 
 dependencies {
@@ -61,4 +80,8 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    // e2e 시나리오 검증·화면 캡처 (에뮬레이터 없이 JVM 에서 실행)
+    testImplementation("org.robolectric:robolectric:4.13")
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.26.0")
 }

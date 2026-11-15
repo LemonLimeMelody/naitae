@@ -65,10 +65,11 @@ internal class PleosNavi(private val context: Context) : NaviGateway {
             refreshDestination()
         }
 
+        // SDK 는 onRouteEnded 를 "Use onRoutingCompleted() instead" 로 사용 중단 예고했다. 즉 이 이벤트는 '경로 탐색 완료'가 아니라
+        // '안내가 끝남'일 수 있으므로 여기서 안내 시작을 알리지 않는다(도착 뒤에 '안내 시작'이 나가지 않게). 안내 시작은 onRouteStarted 로만 알린다.
         override fun onRoutingCompleted() {
             SdkLog.event("NaviHelper.onRoutingCompleted")
             pendingRoute?.complete(Result.success(Unit))
-            announceGuidance(requested?.name ?: destination?.name.orEmpty())
         }
 
         override fun onRouteCancelled() {
@@ -124,6 +125,8 @@ internal class PleosNavi(private val context: Context) : NaviGateway {
     override fun stop() {
         val old = synchronized(lock) {
             val current = helper
+            // 연결을 기다리던 요청이 시간 초과까지 붙잡혀 있지 않게 한다(이미 끝난 대기에는 아무 영향이 없다).
+            connected?.complete(false)
             helper = null
             connected = null
             current

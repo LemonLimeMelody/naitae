@@ -7,6 +7,8 @@ import ai.pleos.playground.vehicle.api.model.capability.CapabilityConfig
 import ai.pleos.playground.vehicle.constant.area.SeatValue
 import ai.pleos.playground.vehicle.constant.control.LightSwitch
 import ai.pleos.playground.vehicle.constant.unit.TemperatureUnit
+import ai.pleos.playground.vehicle.listener.AmbientLightBrightnessColorListener
+import ai.pleos.playground.vehicle.listener.AmbientLightBrightnessListener
 import com.naitae.connect.core.model.AmbientColor
 import com.naitae.connect.vehicle.CabinCapabilities
 import com.naitae.connect.vehicle.CabinControl
@@ -385,6 +387,7 @@ internal class PleosCabin(
             }
             if (nearest != null) _state.update { it.copy(ambientColor = nearest) }
         }
+        if (ambient != null) watchAmbient(ambient)
         seatHeatCap.get()?.area?.let { area ->
             val result = awaitSdk<Int?>("Seat.getHvacSeatTemperature()") { ok, fail ->
                 vehicle.getSeat().getHvacSeatTemperature(area, ok, fail)
@@ -414,6 +417,52 @@ internal class PleosCabin(
             }
             logResult("HVAC.getHvacFanSpeed()", result) { "${it ?: "값 없음"}단" }
             result.getOrNull()?.let { fan -> _state.update { it.copy(fanLevel = fan) } }
+        }
+    }
+
+    /**
+     * 차에서 바뀐 앰비언트 밝기·색을 state 에 반영한다.
+     * 앱은 조명을 바꾸기 전에 state 를 기억했다가 되돌리므로, 연결 때 한 번 읽은 값만 두면
+     * 그 뒤 사용자가 차량 설정에서 바꾼 조명이 아니라 앱을 켰을 때의 조명으로 되돌아간다.
+     * (연결당 한 번 등록하고, 해제는 Vehicle.release() 가 한꺼번에 한다.)
+     */
+    private fun watchAmbient(ambient: AmbientCap) {
+        val light = session.vehicle.getLight()
+        ambient.brightness.entries.firstOrNull()?.let { (area, bounds) ->
+            val listener = object : AmbientLightBrightnessListener {
+                override fun onBrightnessUpdated(value: Int?) {
+                    if (value == null) return
+                    val percent = toPercent(value, bounds)
+                    SdkLog.event("Light.onBrightnessUpdated → $percent%")
+                    _state.update { it.copy(ambientBrightness = percent) }
+                }
+
+                override fun onFailed(e: Exception) {
+                    SdkLog.sys("앰비언트 밝기 리스너 오류 · ${e.brief()}")
+                }
+            }
+            safeSdk("Light.registerAmbientLightBrightnessListener()") {
+                light.registerAmbientLightBrightnessListener(area, listener)
+                SdkLog.api("Light.registerAmbientLightBrightnessListener(listener)")
+            }
+        }
+        ambient.colorAreas.firstOrNull()?.let { area ->
+            val listener = object : AmbientLightBrightnessColorListener {
+                override fun onBrightnessColorUpdated(value: Int?) {
+                    if (value == null) return
+                    val nearest = nearestColor(value) ?: return
+                    SdkLog.event("Light.onBrightnessColorUpdated → ${formatArgb(value)} (${nearest.label})")
+                    _state.update { it.copy(ambientColor = nearest) }
+                }
+
+                override fun onFailed(e: Exception) {
+                    SdkLog.sys("앰비언트 색 리스너 오류 · ${e.brief()}")
+                }
+            }
+            safeSdk("Light.registerAmbientLightBrightnessColorListener()") {
+                light.registerAmbientLightBrightnessColorListener(area, listener)
+                SdkLog.api("Light.registerAmbientLightBrightnessColorListener(listener)")
+            }
         }
     }
 
@@ -474,6 +523,7 @@ internal class PleosCabin(
             dr * dr + dg * dg + db * db
         }
 
+    /** set 호출의 "적용"은 SDK 의 성공 콜백을 받았다는 뜻이다. 앰비언트는 뒤따르는 리스너 이벤트(Light.on…Updated) 줄로 실제 반영을 확인할 수 있다. */
     private fun <T> logResult(call: String, result: Result<T>, describeValue: (T) -> String) {
         SdkLog.api("$call → " + result.fold({ describeValue(it) }, { "실패 · ${it.brief()}" }))
     }

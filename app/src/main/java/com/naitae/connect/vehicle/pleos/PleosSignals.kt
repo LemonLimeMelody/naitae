@@ -28,6 +28,9 @@ import kotlinx.coroutines.withTimeoutOrNull
  *  Vehicle SDK 공개 API 에는 시동 상태를 읽는 함수가 없다. 차량용 앱은 차 전원이 켜져 있을 때만 실행되므로,
  *  SDK 가 연결되어 차량 값(기어 등)이 처음 도착한 때를 '시동 ON'으로 보고, stop() 이 불리면 'OFF'로 본다.
  *  앱이 켜진 채로 시동만 껐다 켜는 경우는 구분하지 못한다.
+ *  즉 ON 은 '앱 프로세스가 차량 연결을 시작한 때'이고, 연결을 붙잡는 곳(화면·지켜보는 서비스)이 하나라도 남아 있는 동안에는
+ *  OFF 가 나가지 않는다. 헤드유닛이 꺼지지 않고 대기(suspend)했다가 깨어나는 차에서는 다음 날 시동에도 ON 이 다시 나가지 않는다
+ *  (한계와 대안은 docs/PLEOS_ADAPTER_REVIEW.md 3절).
  */
 internal class PleosSignals(
     private val session: PleosVehicleSession,
@@ -91,9 +94,10 @@ internal class PleosSignals(
         session.connect()
         job = scope.launch {
             session.connected.first { it }
-            applyGear(session.firstGear)
-            SdkLog.api("Gear.getCurrentGearSelectionState() → ${session.firstGear?.name ?: "값 없음"}")
+            // 변화를 놓치지 않게 리스너를 먼저 걸고, 지금 기어를 새로 읽는다.
+            // (연결을 확인하며 읽어 둔 값은 stop() 뒤 다시 start() 하면 옛 값이므로 그대로 쓰지 않는다.)
             subscribeGear()
+            readGear()
             // 시동 ON 을 알리기 전에 주행거리·좌석·VIN 의 첫 값을 채운다(값이 늦으면 기다리지 않고 넘어간다).
             val firstReads = listOf(
                 launch { readAndSubscribeOdometer() },
@@ -151,6 +155,25 @@ internal class PleosSignals(
         safeSdk("Gear.registerGearSelection()") {
             session.vehicle.getGear().registerGearSelection(gearListener)
             SdkLog.api("Gear.registerGearSelection(listener)")
+        }
+    }
+
+    private suspend fun readGear() {
+        val result = awaitSdk<VehicleGear?>("Gear.getCurrentGearSelectionState()") { ok, fail ->
+            @Suppress("DEPRECATION")
+            session.vehicle.getGear().getCurrentGearSelectionState(ok, fail)
+        }
+        val read = result.getOrNull()
+        SdkLog.api(
+            "Gear.getCurrentGearSelectionState() → " +
+                (if (result.isSuccess) (read?.name ?: "값 없음") else "실패 · ${result.exceptionOrNull()?.brief()}"),
+        )
+        if (!started) return
+        if (result.isSuccess) {
+            applyGear(read)
+        } else if (_gear.value == GearState.UNKNOWN) {
+            // 읽지 못했고 리스너로 받은 값도 아직 없으면, 방금 연결을 확인하며 읽어 둔 값을 쓴다.
+            applyGear(session.firstGear)
         }
     }
 

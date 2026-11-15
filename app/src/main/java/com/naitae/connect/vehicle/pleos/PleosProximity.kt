@@ -34,13 +34,18 @@ internal class PleosProximity(private val context: Context) : ProximityGateway {
     private var client: FusedLocation? = null
     private var initialized = false
 
+    @Volatile
+    private var supportedCache: Boolean? = null
+
     /** 장소 이름 → SDK 가 돌려준 알림 ID */
     private val alertIds = HashMap<String, String>()
 
     override suspend fun isSupported(): Boolean {
+        // 위치 서비스 패키지가 설치되어 있는지만 보는 호출이라 실행 중에 바뀌지 않는다. 한 번 확인한 값을 다시 쓴다.
+        supportedCache?.let { return it }
         val fused = clientOrNull() ?: return false
         val supported = try {
-            fused.isSupported()
+            fused.isSupported().also { supportedCache = it }
         } catch (t: Throwable) {
             SdkLog.sys("FusedLocation.isSupported() 실패 · ${t.brief()}")
             false
@@ -83,6 +88,8 @@ internal class PleosProximity(private val context: Context) : ProximityGateway {
                         if (abandoned.get()) {
                             safeSdk("FusedLocation.removeProximityAlert()") { fused.removeProximityAlert(alertId) }
                         } else {
+                            // 등록되자마자 오는 전이(이미 반경 안에 있을 때)를 버리지 않도록, 응답을 넘기기 전에 여기서 먼저 적어 둔다.
+                            synchronized(alertIds) { alertIds[place.name] = alertId }
                             ok(alertId)
                         }
                     }
@@ -109,6 +116,8 @@ internal class PleosProximity(private val context: Context) : ProximityGateway {
         )
         if (alertId == null) {
             abandoned.set(true)
+            // 시간 초과와 등록 응답이 엇갈려 방금 적힌 알림이 있으면 지운다.
+            removeAlert(fused, place.name)
             return@withLock Result.failure(registered.exceptionOrNull() ?: IllegalStateException("근접 알림 등록 실패"))
         }
         synchronized(alertIds) { alertIds[place.name] = alertId }

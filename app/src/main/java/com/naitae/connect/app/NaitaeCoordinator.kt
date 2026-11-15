@@ -244,6 +244,7 @@ class NaitaeCoordinator(
         when (leaving) {
             is Screen.LetterOpen -> endLetter(leaving.letter, running, keepLight = false)
             is Screen.LetterArrive -> memory.postponedLetter = leaving.letter
+            is Screen.Handover -> releaseLetterLight()
             is Screen.RecordEdit -> memory.selectedTopicId = leaving.topic.id
             is Screen.Decorate -> memory.selectedTopicId = leaving.topic.id
             is Screen.RecallView -> memory.selectedTopicId = leaving.recall.topic.id
@@ -329,6 +330,8 @@ class NaitaeCoordinator(
         clearToast()
         memory = Transient()
         light.forget()
+        // 끊긴 편지 연출이 기억해 둔 '편지 전 조명'도 버린다(조명은 건드리지 않는다).
+        performer.finish(keepLight = true)
         tracker = newTracker()
         feed(TripSignal.Gear(platform.signals.gear.value))
         platform.signals.odometerKm.value?.let { feed(TripSignal.Odometer(it)) }
@@ -689,7 +692,10 @@ class NaitaeCoordinator(
 
     override fun dismissHandover() {
         whenParked {
-            if (screen is Screen.Handover) showHome()
+            if (screen is Screen.Handover) {
+                releaseLetterLight()
+                showHome()
+            }
         }
     }
 

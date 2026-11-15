@@ -41,6 +41,7 @@ import com.naitae.connect.ui.screens.parts.PhotoFrame
 import com.naitae.connect.ui.screens.parts.ScreenStage
 import com.naitae.connect.ui.screens.parts.TouchMin
 import com.naitae.connect.ui.screens.parts.TypingText
+import com.naitae.connect.ui.screens.parts.keepWordsTogether
 import com.naitae.connect.ui.theme.NaitaeColors
 
 private const val ReservedLetterNote = "오늘 열리도록 예약해 둔 편지"
@@ -174,12 +175,12 @@ private fun LetterReading(state: Screen.LetterOpen, enabled: Boolean, actions: N
             Box(modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp)) {
                 // 글자가 늘어나도 자리가 흔들리지 않게, 편지 전체 크기만큼 자리를 먼저 잡아 둔다
                 Text(
-                    text = state.letter.text,
+                    text = keepWordsTogether(state.letter.text),
                     style = LetterTextStyle,
                     modifier = Modifier.alpha(0f).clearAndSetSemantics { },
                 )
                 TypingText(
-                    text = state.shownText,
+                    text = keepWordsTogether(state.shownText),
                     typing = state.phase == LetterPhase.READING,
                     style = LetterTextStyle,
                 )

@@ -1,6 +1,7 @@
 package com.naitae.connect.vehicle.pleos
 
 import ai.pleos.playground.vehicle.Vehicle
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -27,6 +28,7 @@ object PleosPlatform {
     // Vehicle SDK 가 서비스에 연결할 때 쓰는 값(SDK 의 Constants 는 internal 이라 가져다 쓸 수 없어 그대로 적는다).
     private const val VEHICLE_ACTION = "ai.pleos.playground.vehicle.VEHICLE_START"
     private const val VEHICLE_SERVICE_PACKAGE = "ai.pleos.playground.service.vehicle"
+    private const val VEHICLE_SERVICE_CLASS = "ai.pleos.playground.service.vehicle.VehicleService"
 
     private var active: Active? = null
 
@@ -111,8 +113,13 @@ object PleosPlatform {
         val packageManager = context.packageManager
         val automotive = packageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)
         val intent = Intent(VEHICLE_ACTION).setPackage(VEHICLE_SERVICE_PACKAGE)
+        // SDK 는 이 컴포넌트를 직접 지정해 바인딩한다. 액션으로 찾지 못해도 SDK 와 같은 방식으로 한 번 더 확인해,
+        // Pleos 기기인데 시뮬레이터로 넘어가는 일이 없게 한다.
+        val explicit = Intent(VEHICLE_ACTION)
+            .setComponent(ComponentName(VEHICLE_SERVICE_PACKAGE, VEHICLE_SERVICE_CLASS))
         @Suppress("DEPRECATION")
-        val found = packageManager.resolveService(intent, 0) != null
+        val found = packageManager.resolveService(intent, 0) != null ||
+            packageManager.resolveService(explicit, 0) != null
         if (!found) {
             SdkLog.sys(
                 "Pleos Vehicle 서비스 없음(${if (automotive) "차량용 OS 이지만 Pleos 아님" else "차량용 OS 아님"}) → 시뮬레이터로 실행",

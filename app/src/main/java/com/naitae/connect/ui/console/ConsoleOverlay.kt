@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -40,6 +41,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.naitae.connect.vehicle.CabinState
 import com.naitae.connect.vehicle.GearState
 import com.naitae.connect.vehicle.ScenarioDay
 import com.naitae.connect.vehicle.SdkLog
@@ -65,23 +67,30 @@ private val LogSys = Color(0xFFB9A5DD)
 
 private val SeatLabels = listOf("운전", "조수", "뒤 왼", "뒤 오")
 
+/** 이 너비부터는 날짜 3칸 · 목적지 4칸 · 할 말 4칸으로 놓는다 */
+private val WideWidth = 480.dp
+
 /** 음성 입력을 흉내 낼 때 고르는 말(시나리오의 한마디) */
 private val SayPresets = listOf("내일 세차 예약", "올해 첫 감성돔", "아빠, 내년에 또 오자!", "안내해 줘")
 
 /**
  * 가상 콘솔 패널. 시뮬레이터일 때만 화면 오른쪽에 붙는다(너비 360~420dp 기준).
- * 날짜 6개, 시동/기어, 목적지 도착, 좌석 착석, 지금 값, SDK 호출 로그(SdkLog.lines).
+ * 날짜 6개, 시동/기어, 목적지 도착, 좌석 착석, 시각, 다음에 할 말, 지금 값, SDK 호출 로그(SdkLog.lines).
  * 위쪽 조작부는 길면 스크롤되고, 로그는 남은 높이를 쓰며 새 줄이 오면 맨 아래로 따라간다.
+ * 누르는 것(조작)을 위에, 읽기만 하는 것(지금 값)을 아래에 두어 큰 화면에서는 스크롤 없이 모든 조작이 보이게 한다.
+ * cabin 을 넘기면 지금 값에 실내(조명·열선·공조)도 보여 준다.
  */
 @Composable
-fun ConsoleOverlay(console: SimulatorConsole, modifier: Modifier = Modifier) {
+fun ConsoleOverlay(console: SimulatorConsole, modifier: Modifier = Modifier, cabin: CabinState? = null) {
     val sim by console.state.collectAsStateWithLifecycle()
     val lines by SdkLog.lines.collectAsStateWithLifecycle()
     var lastSaid by remember { mutableStateOf<String?>(null) }
 
     BoxWithConstraints(modifier.background(PanelBg)) {
-        // 조작부가 로그 자리를 다 차지하지 않게 높이의 58%까지만
-        val controlsMax = if (constraints.hasBoundedHeight) maxHeight * 0.58f else Dp.Unspecified
+        // 조작부가 로그 자리를 다 차지하지 않게 높이의 60%까지만(1080 높이에서 조작 버튼이 모두 들어가는 높이)
+        val controlsMax = if (constraints.hasBoundedHeight) maxHeight * 0.6f else Dp.Unspecified
+        // 패널이 넓으면 한 줄에 더 많이 놓아 조작부의 높이를 줄인다
+        val wide = constraints.hasBoundedWidth && maxWidth >= WideWidth
         Column(
             modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -95,7 +104,7 @@ fun ConsoleOverlay(console: SimulatorConsole, modifier: Modifier = Modifier) {
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 ControlGroup("날짜") {
-                    ButtonGrid(ScenarioDay.values().toList(), columns = 2) { day, cell ->
+                    ButtonGrid(ScenarioDay.values().toList(), columns = if (wide) 3 else 2) { day, cell ->
                         ConsoleButton(
                             text = day.label,
                             selected = sim.day == day,
@@ -124,7 +133,7 @@ fun ConsoleOverlay(console: SimulatorConsole, modifier: Modifier = Modifier) {
                 }
                 if (console.places.isNotEmpty()) {
                     ControlGroup("목적지 도착 (즐겨찾기 = 주제 장소)") {
-                        ButtonGrid(console.places, columns = 3) { place, cell ->
+                        ButtonGrid(console.places, columns = if (wide) 4 else 3) { place, cell ->
                             ConsoleButton(
                                 text = place.name,
                                 selected = sim.guidanceTo?.name == place.name,
@@ -152,17 +161,6 @@ fun ConsoleOverlay(console: SimulatorConsole, modifier: Modifier = Modifier) {
                                 enabled = i != 0,
                             )
                         }
-                    }
-                }
-                ControlGroup("지금 값") {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ValueTile("기어", gearLabel(sim), Modifier.weight(0.7f))
-                        ValueTile("주행거리", odometerLabel(sim.odometerKm), Modifier.weight(1.2f))
-                        ValueTile("VIN 끝자리", vinTail(sim.vin), Modifier.weight(1.2f))
-                    }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ValueTile("날짜 · 시각", clockLabel(sim), Modifier.weight(1.4f))
-                        ValueTile("차", sim.carModel.ifBlank { "-" }, Modifier.weight(1f))
                     }
                 }
                 ControlGroup("시각 바꾸기") {
@@ -194,7 +192,7 @@ fun ConsoleOverlay(console: SimulatorConsole, modifier: Modifier = Modifier) {
                     }
                 }
                 ControlGroup("다음에 할 말 (음성 입력 흉내)") {
-                    ButtonGrid(SayPresets, columns = 2) { text, cell ->
+                    ButtonGrid(SayPresets, columns = if (wide) 4 else 2) { text, cell ->
                         ConsoleButton(
                             text = text,
                             selected = lastSaid == text,
@@ -204,6 +202,27 @@ fun ConsoleOverlay(console: SimulatorConsole, modifier: Modifier = Modifier) {
                             },
                             modifier = cell,
                         )
+                    }
+                }
+                // 읽기만 하는 값은 조작과 조금 띄운다
+                Spacer(Modifier.height(2.dp))
+                ControlGroup("지금 값") {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        ValueTile("기어", gearLabel(sim), Modifier.weight(0.7f))
+                        ValueTile("주행거리", odometerLabel(sim.odometerKm), Modifier.weight(1.2f))
+                        ValueTile("VIN 끝자리", vinTail(sim.vin), Modifier.weight(1.2f))
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        ValueTile("날짜 · 시각", clockLabel(sim), Modifier.weight(1.4f))
+                        ValueTile("차", sim.carModel.ifBlank { "-" }, Modifier.weight(1f))
+                    }
+                    if (cabin != null) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ValueTile("실내 조명", ambientLabel(cabin), Modifier.weight(1.2f))
+                            ValueTile("시트 열선", seatHeatLabel(cabin), Modifier.weight(1f))
+                            ValueTile("핸들 열선", steeringHeatLabel(cabin), Modifier.weight(1f))
+                            ValueTile("공조", climateLabel(cabin), Modifier.weight(1.4f))
+                        }
                     }
                 }
             }
@@ -352,6 +371,29 @@ private fun gearLabel(sim: SimState): String {
         GearState.DRIVE -> "D"
         GearState.UNKNOWN -> "-"
     }
+}
+
+private fun ambientLabel(cabin: CabinState): String {
+    val color = cabin.ambientColor ?: return "-"
+    val level = cabin.ambientBrightness ?: return color.label
+    return if (level <= 0) "끔" else "${color.label} $level"
+}
+
+private fun seatHeatLabel(cabin: CabinState): String {
+    val level = cabin.seatHeatLevel ?: return "-"
+    return if (level <= 0) "끔" else "${level}단"
+}
+
+private fun steeringHeatLabel(cabin: CabinState): String = when (cabin.steeringHeat) {
+    null -> "-"
+    true -> "켬"
+    false -> "끔"
+}
+
+private fun climateLabel(cabin: CabinState): String {
+    val temp = cabin.cabinTempC?.let { String.format(Locale.US, "%.0f℃", it) }
+    val fan = cabin.fanLevel?.let { "바람 $it" }
+    return listOfNotNull(temp, fan).joinToString(" · ").ifEmpty { "-" }
 }
 
 private fun odometerLabel(km: Float): String = String.format(Locale.US, "%,dkm", Math.round(km))

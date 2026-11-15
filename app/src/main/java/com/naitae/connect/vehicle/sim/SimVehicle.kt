@@ -1,5 +1,6 @@
 package com.naitae.connect.vehicle.sim
 
+import android.os.SystemClock
 import com.naitae.connect.core.model.Place
 import com.naitae.connect.data.SeedData
 import com.naitae.connect.vehicle.GearState
@@ -44,7 +45,7 @@ internal class SimVehicle(
     private val lock = Any()
 
     @Volatile
-    private var anchor = ClockAnchor(SeedData.dateTimeOf(ScenarioDay.WEEKDAY), System.nanoTime())
+    private var anchor = ClockAnchor(SeedData.dateTimeOf(ScenarioDay.WEEKDAY), monotonicNanos())
 
     private val _state = MutableStateFlow(stateFor(ScenarioDay.WEEKDAY, SeedData.dateTimeOf(ScenarioDay.WEEKDAY)))
     override val state: StateFlow<SimState> = _state.asStateFlow()
@@ -105,16 +106,16 @@ internal class SimVehicle(
     /** 시뮬레이션 날짜·시각. 정한 순간부터 실제 시간만큼 흐른다. */
     fun clockNow(): LocalDateTime {
         val a = anchor
-        return a.base.plusNanos(System.nanoTime() - a.atNanos)
+        return a.base.plusNanos(monotonicNanos() - a.atNanos)
     }
 
     /** 시계 표시를 갱신하고, D 에 있는 동안 주행거리를 조금씩 올린다. SimPlatform 이 한 번 부른다. */
     fun startClock() {
         scope.launch {
-            var last = System.nanoTime()
+            var last = monotonicNanos()
             while (isActive) {
                 delay(TICK_MS)
-                val t = System.nanoTime()
+                val t = monotonicNanos()
                 // 앱이 멈춰 있다 돌아와도 주행거리가 한꺼번에 튀지 않게 한다
                 val dtSec = ((t - last) / 1e9f).coerceIn(0f, MAX_TICK_SEC)
                 last = t
@@ -141,7 +142,7 @@ internal class SimVehicle(
                 "${next.carModel} ${km(next.odometerKm)}km · ${next.seats.count}명 탑승",
         )
         synchronized(lock) {
-            anchor = ClockAnchor(start, System.nanoTime())
+            anchor = ClockAnchor(start, monotonicNanos())
             mutate { next }
         }
         lastLoggedOdo = next.odometerKm
@@ -154,7 +155,7 @@ internal class SimVehicle(
         SdkLog.sys("가상 콘솔 · 시각 = ${String.format(Locale.KOREA, "%02d:%02d", h, m)}")
         synchronized(lock) {
             val target = clockNow().toLocalDate().atTime(h, m)
-            anchor = ClockAnchor(target, System.nanoTime())
+            anchor = ClockAnchor(target, monotonicNanos())
             mutate { it.copy(now = target) }
         }
     }
@@ -368,6 +369,12 @@ internal class SimVehicle(
         }
     }
 }
+
+/**
+ * 시뮬레이터 시계가 기대는 단조 시계. System.nanoTime() 대신 안드로이드의 부팅 뒤 경과 시간을 쓴다:
+ * 기기에서는 똑같이 흐르고, JVM 검증(Robolectric)에서는 delay 와 같은 가상 시계를 따라가 시나리오를 시간까지 재현할 수 있다.
+ */
+private fun monotonicNanos(): Long = SystemClock.elapsedRealtimeNanos()
 
 /** 12840.0 → "12,840" */
 private fun km(value: Float): String = String.format(Locale.KOREA, "%,d", value.roundToInt())

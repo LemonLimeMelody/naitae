@@ -125,6 +125,14 @@ internal class PleosVehicleSession(
                 if (attempt == 0 || attempt == PROBE_ATTEMPTS - 1) {
                     SdkLog.sys("Vehicle 서비스 응답 대기 · ${result.exceptionOrNull()?.brief()}")
                 }
+                // SDK 는 서비스 바인딩을 15초쯤(0.5초 간격 30번) 시도하다 포기하면, 그 뒤 호출을 모두 이 오류로 곧바로 돌려주고
+                // 스스로 다시 붙지 않는다(바인딩 중일 때는 호출을 쌓아 두므로 이 오류가 나지 않는다). initialize() 로 바인딩을 다시 시작한다.
+                if (result.exceptionOrNull()?.message == SERVICE_NOT_BOUND) {
+                    safeSdk("Vehicle.initialize()") {
+                        vehicle.initialize()
+                        SdkLog.api("Vehicle.initialize() · 서비스 바인딩 다시 시도")
+                    }
+                }
                 delay(waitMs)
                 waitMs = (waitMs * 2).coerceAtMost(3_000L)
             }
@@ -148,5 +156,8 @@ internal class PleosVehicleSession(
     private companion object {
         const val PROBE_ATTEMPTS = 20
         const val CONNECT_WAIT_MS = 6_000L
+
+        /** ErrorCode.ERROR_SERVICE_CONNECTION_FAILURE 의 이름. Vehicle SDK 의 예외는 메시지가 오류 코드 이름이다. */
+        const val SERVICE_NOT_BOUND = "ERROR_SERVICE_CONNECTION_FAILURE"
     }
 }

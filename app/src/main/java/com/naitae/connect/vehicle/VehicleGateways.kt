@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.time.LocalDateTime
 
 /*
@@ -174,7 +175,14 @@ object SdkLog {
     fun clear() { _lines.value = emptyList() }
 
     private fun add(kind: SdkLogKind, text: String) {
-        _lines.value = (_lines.value + SdkLogLine(kind, text)).takeLast(MAX)
+        // SDK 콜백은 바인더 스레드에서 오므로 원자적으로 더한다.
+        _lines.update { (it + SdkLogLine(kind, text)).takeLast(MAX) }
+        // Pleos 에뮬레이터에서는 가상 콘솔이 없으므로 Logcat(태그 NaitaeSdk)으로도 남긴다.
+        try {
+            android.util.Log.i("NaitaeSdk", "[${kind.name}] $text")
+        } catch (e: Throwable) {
+            // JVM 단위 테스트에는 android.util.Log 가 없다.
+        }
     }
 }
 
