@@ -159,7 +159,9 @@ Android 9(API 28) 이상이면 같은 APK 를 그대로 설치한다. 앱은 Ple
 
 ## APK 위치
 
-제출용 APK 는 `apk/<팀명>_나이테_release.apk` 에 둔다. `<팀명>` 은 제출 전에 실제 팀명으로 바꿔야 하는 자리 표시다. `./gradlew :app:assembleRelease` 로 만든 `app/build/outputs/apk/release/app-release.apk` 를 이 이름으로 복사한다.
+제출용 release APK: [`apk/살구와체리_나이테_release.apk`](apk/살구와체리_나이테_release.apk)
+
+`./gradlew :app:assembleRelease` 로 만든 `app/build/outputs/apk/release/app-release.apk` 를 이 이름으로 복사한 것이다.
 
 ## 프로젝트 구조
 
