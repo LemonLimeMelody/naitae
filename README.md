@@ -126,6 +126,16 @@ Android 9(API 28) 이상이면 같은 APK 를 그대로 설치한다. 앱은 Ple
 | SDK 저장소 | `https://nexus-playground.pleos.ai/repository/maven-releases/` (`settings.gradle.kts`) |
 | 대상 에뮬레이터 | Pleos Connect Emulator v2.1.0 (API 34, Cold boot) |
 
+### 개발에 사용한 Pleos Connect 에뮬레이터 버전과 화면 규격
+
+| 항목 | 값 |
+|---|---|
+| 에뮬레이터 버전 | Pleos Connect Emulator **v2.1.0** (AVD: Form Factor Automotive → `Pleos Connect v2.1.0 APIs`, API 34, Default boot Cold, RAM 4 GB, Graphics Hardware) |
+| SDK 릴리즈 | 2026-10-19 (Vehicle 2.3.2, NaviHelper 3.0.5, TextToSpeech 3.3.1, SpeechToText 3.3.1, FusedLocation 1.1.3) |
+| 화면 방향 | 가로(landscape) 고정. Pleos 화면 모델의 `landscape` = 창 2개 영역 사용 |
+| 화면 규격(설계·검증 기준) | **1920 × 1080 가로, mdpi(160 dpi, 밀도 1.0)** = 1920 × 1080 dp. 화면 캡처와 UI 테스트가 이 규격으로 실행됨(`@Config(qualifiers = "w1920dp-h1080dp-land-mdpi")`) |
+| 레이아웃 | Jetpack Compose 반응형. 가상 콘솔(시뮬레이터 모드 전용)을 접으면 차량 화면이 전체 영역을 씀 |
+
 ### 선언한 권한
 
 | 권한 | 쓰는 곳 |
