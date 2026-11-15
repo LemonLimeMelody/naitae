@@ -51,7 +51,7 @@ object PleosPlatform {
             null
         }
 
-    /** 앱을 끝낼 때 SDK 연결을 모두 닫는다(부르지 않아도 동작에는 문제없다). */
+    /** 앱을 끝낼 때 SDK 연결을 모두 닫는다(AppContainer.shutdown). Pleos 로 실행 중이 아니면 아무 일도 하지 않는다. */
     @Synchronized
     fun release() {
         val current = active ?: return

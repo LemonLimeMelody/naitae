@@ -53,12 +53,14 @@ private const val GLOW_MAX_ALPHA = 0.8f
 private const val GLOW_STEP_MS = 320
 
 /**
- * 앱 화면 배치: 왼쪽에 차량 화면(NaitaeRoot), 시뮬레이터일 때만 오른쪽에 가상 콘솔.
- * 가상 콘솔은 사이의 손잡이를 눌러 접고 펼 수 있다(접으면 차량 화면이 전체를 쓴다).
+ * 앱 화면 배치: 왼쪽에 차량 화면(NaitaeRoot), 오른쪽에 가상 콘솔(시뮬레이터) 또는 시연 패널(Pleos 모드).
+ * 사이의 손잡이를 눌러 접고 펼 수 있다(접으면 차량 화면이 전체를 쓴다). Pleos 모드에서는 접힌 채로 시작한다.
  */
 @Composable
 fun NaitaeAppScreen(state: UiState, actions: NaitaeActions, console: SimulatorConsole?) {
-    var consoleShown by rememberSaveable { mutableStateOf(true) }
+    // 차의 신호까지 넣는 콘솔 = 시뮬레이터. 실제 차에 연결된 시연 패널은 필요할 때만 편다.
+    val simulated = console?.controlsVehicle == true
+    var consoleShown by rememberSaveable { mutableStateOf(simulated) }
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -77,10 +79,14 @@ fun NaitaeAppScreen(state: UiState, actions: NaitaeActions, console: SimulatorCo
                     .weight(1f)
                     .fillMaxHeight()
                     // 실제 차에서는 실내 조명이 직접 바뀌므로 화면에 흉내 내지 않는다.
-                    .then(if (console != null) Modifier.cabinGlow(state.cabin) else Modifier),
+                    .then(if (simulated) Modifier.cabinGlow(state.cabin) else Modifier),
             )
             if (console != null) {
-                ConsoleHandle(shown = consoleShown, onToggle = { consoleShown = !consoleShown })
+                ConsoleHandle(
+                    name = if (simulated) "가상 콘솔" else "시연 패널",
+                    shown = consoleShown,
+                    onToggle = { consoleShown = !consoleShown },
+                )
                 if (consoleShown) {
                     ConsoleOverlay(
                         console = console,
@@ -133,14 +139,14 @@ private fun Modifier.cabinGlow(cabin: CabinState): Modifier {
 
 /** 가상 콘솔을 접고 펴는 작은 손잡이. 차량 화면 위에 겹치지 않도록 두 영역 사이에 둔다. */
 @Composable
-private fun ConsoleHandle(shown: Boolean, onToggle: () -> Unit) {
+private fun ConsoleHandle(name: String, shown: Boolean, onToggle: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxHeight()
             .width(HandleWidth)
             .background(NaitaeColors.Navy)
             .clickable(
-                onClickLabel = if (shown) "가상 콘솔 접기" else "가상 콘솔 펴기",
+                onClickLabel = if (shown) "$name 접기" else "$name 펴기",
                 onClick = onToggle,
             ),
         contentAlignment = Alignment.Center,

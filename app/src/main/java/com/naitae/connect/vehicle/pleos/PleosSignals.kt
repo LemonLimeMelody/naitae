@@ -6,6 +6,7 @@ import ai.pleos.playground.vehicle.constant.control.VehicleGear
 import ai.pleos.playground.vehicle.listener.DistanceDrivenListener
 import ai.pleos.playground.vehicle.listener.GearSelectionListener
 import ai.pleos.playground.vehicle.listener.SeatOccupancyListener
+import android.os.SystemClock
 import com.naitae.connect.vehicle.GearState
 import com.naitae.connect.vehicle.SdkLog
 import com.naitae.connect.vehicle.SeatOccupancy
@@ -24,13 +25,11 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * 차량 신호(읽기): 기어 · 누적 주행거리 · 좌석 착석 · VIN.
  *
- * 시동(ignitionOn)에 대한 가정:
- *  Vehicle SDK 공개 API 에는 시동 상태를 읽는 함수가 없다. 차량용 앱은 차 전원이 켜져 있을 때만 실행되므로,
- *  SDK 가 연결되어 차량 값(기어 등)이 처음 도착한 때를 '시동 ON'으로 보고, stop() 이 불리면 'OFF'로 본다.
- *  앱이 켜진 채로 시동만 껐다 켜는 경우는 구분하지 못한다.
- *  즉 ON 은 '앱 프로세스가 차량 연결을 시작한 때'이고, 연결을 붙잡는 곳(화면·지켜보는 서비스)이 하나라도 남아 있는 동안에는
- *  OFF 가 나가지 않는다. 헤드유닛이 꺼지지 않고 대기(suspend)했다가 깨어나는 차에서는 다음 날 시동에도 ON 이 다시 나가지 않는다
- *  (한계와 대안은 docs/PLEOS_ADAPTER_REVIEW.md 3절).
+ * 시동(ignitionOn) = 운전석 탑승:
+ *  Vehicle SDK 공개 API 에는 시동 상태를 읽는 함수가 없다. 그래서 '차량 서비스에 연결된 채 운전석에 앉아 있음'을 탑승(ON)으로 본다.
+ *  운전석에 앉으면 ON, 기어 P 에서 운전석이 비면 OFF 이고, 센서 흔들림은 1.5초 동안 가라앉기를 기다린다(DriverSeatIgnition).
+ *  운전석 착좌를 알 수 없는 차(센서 없음·읽기 실패)에서는 예전처럼 차량 값이 처음 도착한 때부터 ON 으로 보고,
+ *  stop() 이 불리면 OFF 로 본다(docs/PLEOS_ADAPTER_REVIEW.md 3절).
  */
 internal class PleosSignals(
     private val session: PleosVehicleSession,
@@ -55,6 +54,9 @@ internal class PleosSignals(
 
     @Volatile
     private var cachedVin: String? = null
+
+    /** 운전석 착좌와 기어로 탑승을 판단한다. 바뀌면 가라앉은 뒤에 알려 준다. */
+    private val boarding = BoardingWatch(scope, { SystemClock.elapsedRealtime() }) { on -> publishBoarding(on) }
 
     /** 등록해 둔 좌석 리스너(해제할 때 같은 영역·같은 인스턴스가 필요하다) */
     private val seatListeners = mutableListOf<Pair<SeatArea, SeatOccupancyListener>>()
@@ -127,6 +129,7 @@ internal class PleosSignals(
         seatsToRelease.forEach { (area, listener) ->
             safeSdk("Seat.unregisterSeatOccupancy()") { vehicle.getSeat().unregisterSeatOccupancy(area, listener) }
         }
+        boarding.stopped()
         _ignitionOn.value = false
         SdkLog.sys("차량 신호 수신 중지 → 시동 OFF 로 봄")
     }
@@ -186,6 +189,7 @@ internal class PleosSignals(
             // D 와 수동 단수(1~9단)는 모두 '주행'으로 본다.
             else -> GearState.DRIVE
         }
+        boarding.gear(_gear.value)
     }
 
     // ───────── 주행거리 ─────────
@@ -267,9 +271,10 @@ internal class PleosSignals(
 
     private fun applySeat(slot: SeatSlot, occupied: Boolean?) {
         if (occupied == null) return
+        if (slot == SeatSlot.DRIVER) boarding.driverSeat(occupied)
         _seats.update { seats ->
             when (slot) {
-                // 운전석은 센서 값과 상관없이 탑승으로 둔다: 시동이 걸려 앱이 동작 중이면 운전자가 있다고 보고,
+                // 좌석 수에서는 운전석을 센서 값과 상관없이 탑승으로 둔다: 운전석 값은 탑승 신호(ignitionOn)로만 쓰고,
                 // 운전석 착석 센서가 없는 차에서도 '동승 여부(둘 이상)' 판단이 틀어지지 않게 하기 위해서다.
                 SeatSlot.DRIVER -> seats
                 SeatSlot.FRONT_PASSENGER -> seats.copy(frontPassenger = occupied)
@@ -287,12 +292,25 @@ internal class PleosSignals(
 
     // ───────── 공통 ─────────
 
-    /** SDK 가 연결되어 차량 값이 도착했다 = 시동 ON 으로 본다(위 클래스 설명의 가정). */
+    /** SDK 가 연결되어 차량 값이 도착했다. 이때부터 운전석 착좌로 탑승을 판단한다(위 클래스 설명). */
     private fun markAlive() {
-        if (started && !_ignitionOn.value) {
-            _ignitionOn.value = true
-            SdkLog.sys("차량 값 수신 → 시동 ON 으로 봄")
-        }
+        if (!started) return
+        val on = boarding.alive()
+        SdkLog.sys(
+            when {
+                !boarding.seatKnown -> "차량 값 수신 · 운전석 착좌 신호 없음 → 시동 ON 으로 봄"
+                on -> "차량 값 수신 · 운전석 착석 → 탑승(시동 ON)으로 봄"
+                else -> "차량 값 수신 · 운전석 비어 있음 → 탑승을 기다림"
+            },
+        )
+        _ignitionOn.value = on
+    }
+
+    /** 가라앉은 탑승 판단을 알린다. */
+    private fun publishBoarding(on: Boolean) {
+        if (!started || _ignitionOn.value == on) return
+        SdkLog.sys(if (on) "운전석 착석 → 탑승(시동 ON)으로 봄" else "운전석 비움(기어 P) → 내림(시동 OFF)으로 봄")
+        _ignitionOn.value = on
     }
 
     private companion object {

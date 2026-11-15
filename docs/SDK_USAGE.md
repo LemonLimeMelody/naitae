@@ -8,7 +8,7 @@
 
 | 인터페이스 | 하는 일 | Pleos 구현 | 시뮬레이터 구현 |
 |---|---|---|---|
-| `VehicleSignals` | 시동, 기어, 누적 주행거리, 좌석 착석, VIN 읽기 | `PleosSignals` | `SimVehicle.signals` |
+| `VehicleSignals` | 시동(Pleos 는 운전석 탑승), 기어, 누적 주행거리, 좌석 착석, VIN 읽기 | `PleosSignals` | `SimVehicle.signals` |
 | `CabinControl` | 실내 조명, 시트 열선, 핸들 열선, 공조 설정 | `PleosCabin` | `SimCabin` |
 | `NaviGateway` | 길 안내 요청, 도착 이벤트, 즐겨찾기 | `PleosNavi` | `SimNavi` |
 | `VoiceOutput` · `VoiceInput` | 낭독 · 음성 입력 | `PleosVoiceOutput` · `PleosVoiceInput` | `SimVoiceOutput` · `SimVoiceInput` |
@@ -16,7 +16,7 @@
 
 ### 실행 환경 판단
 
-`PleosPlatform.createOrNull()` 이 `PackageManager.resolveService()` 로 Pleos Vehicle 서비스(액션 `ai.pleos.playground.vehicle.VEHICLE_START`, 패키지 `ai.pleos.playground.service.vehicle`)를 찾는다. 있으면 Pleos 어댑터를 만들고, 없거나 SDK 생성·초기화에서 예외가 나면 `null` 을 돌려주어 `AppContainer` 가 시뮬레이터로 넘어간다. 서비스가 없는 기기에서는 SDK 객체를 하나도 만들지 않는다.
+`PleosPlatform.createOrNull()` 이 `PackageManager.resolveService()` 로 Pleos Vehicle 서비스(액션 `ai.pleos.playground.vehicle.VEHICLE_START`, 패키지 `ai.pleos.playground.service.vehicle`)를 찾는다. 있으면 Pleos 어댑터를 만들고 그 위에 시연 층(`vehicle/demo/DemoPlatform`, 2.3절)을 씌운다. 없거나 SDK 생성·초기화에서 예외가 나면 `null` 을 돌려주어 `AppContainer` 가 시뮬레이터로 넘어간다. 서비스가 없는 기기에서는 SDK 객체를 하나도 만들지 않는다.
 
 ### 공통 실패 처리 (`PleosSupport.kt`)
 
@@ -25,7 +25,7 @@
 | `awaitSdk(label, timeoutMs = 4000)` | 콜백형 SDK 호출을 `Result` 로 바꾼다. 예외, 실패 콜백, 4초 무응답을 모두 `Result.failure` 로 돌려주고 던지지 않는다. 콜백이 두 번 와도 한 번만 처리한다 |
 | `safeSdk(label) { }` | 리스너 등록·해제, `release()` 같은 호출을 감싸 예외를 로그로만 남긴다 |
 | `Throwable.brief()` | 로그용 짧은 오류 설명. Vehicle SDK 2.3.2 의 예외 클래스는 난독화되어 있어 타입 대신 메시지(`ERROR_…` 코드 이름)를 쓴다 |
-| `SdkLog.api / event / sys` | 호출·이벤트·상태를 한 줄씩 남긴다. 시뮬레이터 모드의 가상 콘솔 "SDK 호출 로그"에 표시된다 |
+| `SdkLog.api / event / sys` | 호출·이벤트·상태를 한 줄씩 남긴다. 시뮬레이터 모드의 가상 콘솔과 Pleos 모드의 시연 패널 "SDK 호출 로그"에 표시되고, Logcat(태그 `NaitaeSdk`)에도 남는다 |
 
 한 흐름이 실패해도 코디네이터(`NaitaeCoordinator.guarded`)가 예외를 잡아 앱은 계속 실행된다.
 
@@ -47,12 +47,38 @@
 |---|---|---|---|
 | `Gear.registerGearSelection(GearSelectionListener)` → `onSelected(VehicleGear)`, `unregisterGearSelection` | P 여부 판단. P 에서만 화면 흐름을 시작하고, P 가 아니면 낭독·연출을 멈추고 터치를 잠근다. `GEAR_DRIVE` 와 수동 단수는 모두 주행으로 본다 | `CAR_DRIVE` | 리스너 `onFailed` 는 로그만 남긴다. 값이 없으면 `UNKNOWN` 으로 두고 화면 흐름을 시작하지 않는다 |
 | `Odometer.registerDistanceDriven(DistanceDrivenListener)` → `onDistanceDrivenUpdated(Float?)`, `getCurrentDistanceDriven`, `unregisterDistanceDriven` | 이번 이동 거리(도착 이벤트에 거리가 없을 때 시동 뒤 늘어난 값), 이어받기 화면의 새 차 주행거리 | `CAR_DRIVE` | 읽지 못하면 `null` 로 두고 진행한다 |
-| `Seat.checkSeatOccupancyCapabilities`, `registerSeatOccupancy(SeatArea, SeatOccupancyListener)` → `onSeatOccupancyUpdated(Boolean?)`, `getCurrentSeatOccupancy`, `unregisterSeatOccupancy` | 기록의 좌석 수(함께한 날 여부). 동승자가 있으면 개인 메모는 읽지 않고, 새 차 첫 시동의 편지는 바로 열지 않고 먼저 묻는다 | `CAR_SEATS` | 지원 영역 목록을 받으면 그 안에서 `ROW_1_LEFT` · `ROW_1_RIGHT` · `ROW_2_LEFT` · `ROW_2_RIGHT` 를 찾고, 못 받으면 좌석 하나짜리 영역으로 시도한다. 운전석은 센서 값과 무관하게 탑승으로 둔다. 해제는 등록한 영역·리스너 그대로 한다 |
+| `Seat.checkSeatOccupancyCapabilities`, `registerSeatOccupancy(SeatArea, SeatOccupancyListener)` → `onSeatOccupancyUpdated(Boolean?)`, `getCurrentSeatOccupancy`, `unregisterSeatOccupancy` | 기록의 좌석 수(함께한 날 여부). 동승자가 있으면 개인 메모는 읽지 않고, 새 차 첫 시동의 편지는 바로 열지 않고 먼저 묻는다 | `CAR_SEATS` | 지원 영역 목록을 받으면 그 안에서 `ROW_1_LEFT` · `ROW_1_RIGHT` · `ROW_2_LEFT` · `ROW_2_RIGHT` 를 찾고, 못 받으면 좌석 하나짜리 영역으로 시도한다. 운전석(`ROW_1_LEFT`) 값은 탑승 신호로 쓰고, 좌석 수에서는 센서 값과 무관하게 탑승으로 둔다. 해제는 등록한 영역·리스너 그대로 한다 |
 | `CarInfo.getVINInfo` | 계정에 등록된 차와 VIN 이 다르면 이어받기 | `CAR_INFO` | 못 읽으면 `null` 을 돌려주고 이어받기 판단을 건너뛴다. 읽은 값은 캐시한다 |
 
-시동 상태는 Vehicle SDK 공개 API 에 없다. 어댑터는 SDK 가 연결되어 차량 값이 처음 도착한 때를 시동 ON 으로, `stop()` 이 불린 때를 OFF 로 본다. 앱이 켜진 채로 시동만 껐다 켜는 경우는 구분하지 못한다. 이 부분이 10절의 시동 이벤트 API 제안으로 이어진다.
+시동 상태는 Vehicle SDK 공개 API 에 없다. 어댑터는 **운전석 탑승**을 시동 신호(`VehicleSignals.ignitionOn`)로 쓴다.
 
-### 2.3 실내 제어 (`PleosCabin.kt`)
+| 상황 | ignitionOn |
+|---|---|
+| 차량 서비스에 연결되어 첫 값(기어·주행거리·좌석·VIN)을 읽기 전 | 꺼짐 |
+| 첫 값을 읽은 때 운전석이 착석 | 켜짐(바로) |
+| 운전석 `onSeatOccupancyUpdated(true)` | 1.5초 동안 그대로면 켜짐 |
+| 기어 P 에서 운전석 `onSeatOccupancyUpdated(false)` | 1.5초 동안 그대로면 꺼짐 |
+| 기어가 P 가 아닐 때의 `false` | 반영하지 않음. P 가 되었을 때도 비어 있으면 그때부터 1.5초 뒤 꺼짐 |
+| 운전석 착좌 값을 받은 적이 없음(센서 없음, 읽기 실패) | 첫 값을 읽은 때부터 켜짐, `stop()` 이 불리면 꺼짐 |
+
+판단은 SDK 를 모르는 `DriverSeatIgnition`(`vehicle/pleos/DriverSeatIgnition.kt`)이 하고 단위 테스트가 있다. 1.5초는 착좌 센서의 흔들림에 시동 흐름이 다시 시작되지 않게 하는 시간이다. 코디네이터는 켜짐을 받으면 그 탑승의 흐름(이어받기, "오늘을 남길까요?", 편지, 하루 첫 브리핑, 저녁 메모, 길 안내 질문)을 한 번 진행한다. 이 부분이 10절의 시동 이벤트 API 제안으로 이어진다.
+
+### 2.3 Pleos 모드의 시연 층 (`vehicle/demo/`)
+
+Pleos Virtual Console 에는 날짜, 내비게이션 도착, VIN 카드가 없다. `DemoPlatform.wrap()` 은 실제 Pleos 플랫폼을 감싸 그 부분만 채운다. 차량 신호, 실내 제어, 음성 출력은 실제 SDK 그대로다.
+
+| 부품 | 하는 일 |
+|---|---|
+| 시연 시계 | 시나리오 날짜·시각(`SeedData.dateTimeOf`)에서 시작해 실제 시간만큼 흐른다. 시연 패널의 날짜·시각 버튼으로 바꾼다 |
+| `DemoNavi` | 실제 NaviHelper 이벤트에 시연 패널이 넣은 도착(`NaviEvent.Arrived`, 장소별 거리)을 더한다. 길 안내 요청은 실제 `NaviHelper.requestRoute` 로 간다. 도착을 넣어도 기어는 바꾸지 않는다: 기어가 D 면 앱은 P 가 될 때까지 화면 반응을 미루고, 이미 P 면 그 자리에 도착해 세운 것으로 처리한다 |
+| `DemoVoiceInput` | 시연 패널에서 넣은 말이 있으면 다음 듣기의 답으로 쓰고(마이크를 열지 않는다), 없으면 실제 SpeechToText 로 듣는다. 실제 STT 가 듣는 도중에 넣은 말도 그 듣기의 답이 된다 |
+| `DemoProximity` | 실제 FusedLocation 이벤트에, 근접 알림을 걸어 둔 장소로 도착을 넣었을 때의 '가까워짐'을 더한다 |
+| `DemoSignals` | 실제 신호를 그대로 넘긴다. VIN 을 읽을 수 없는 환경에서 "20년 뒤" 날짜일 때만 정해 둔 새 차 VIN 을 돌려준다 |
+| `DemoConsole` | 시연 패널. 날짜, 시각, 도착, 다음에 할 말을 넣고, 실제 기어·주행거리·좌석·VIN·탑승 여부를 보여 준다. 시동·기어·좌석은 넣지 않는다(`controlsVehicle = false`) |
+
+시연 패널에서 날짜를 고르면 코디네이터가 그날의 가상 데이터로 바꾸면서 가상 데이터의 첫 차를 `CarInfo.getVINInfo` 로 읽은 VIN 으로 등록한다("20년 뒤"는 그대로 둔다). 시연 날짜·시각과 이동 상태는 `files/naitae-session.json`(`data/SessionStore.kt`)에 두어 프로세스가 다시 떠도 이어 간다.
+
+### 2.4 실내 제어 (`PleosCabin.kt`)
 
 모든 설정은 먼저 `check…Capabilities` 로 접근 유형(`AccessType.WRITE` · `READ_WRITE`)과 영역·범위를 받아 캐시하고 그 안에서만 부른다. 기능 확인이 응답하지 않으면 캐시하지 않고 다음 호출에서 다시 묻는다.
 
@@ -88,12 +114,12 @@
 
 | API | 쓰는 기능 | 권한 | 실패 처리 |
 |---|---|---|---|
-| `TextToSpeech(context, Mode.ON_DEVICE)`, `initialize(OnInitializeListener)`, `setLocale(Locale.KOREA)`, `addEventListener(EventListener)` | 차 안 엔진과 한국어로 준비한다. `ON_DEVICE` 만 쓰므로 앱 등록(`registerApp`)을 하지 않는다. 앱 시작 때 미리 초기화한다 | `TTS_SERVICE` | 초기화가 실패하거나 5초 안에 끝나지 않으면 30초 뒤에 다시 시도한다 |
+| `TextToSpeech(context, Mode.ON_DEVICE)`, `initialize(OnInitializeListener)`, `setLocale(Locale.KOREA)`, `setSpeakerType("haeun")`, `addEventListener(EventListener)` | 차 안 엔진과 한국어, 한국어 화자로 준비한다. `ON_DEVICE` 만 쓰므로 앱 등록(`registerApp`)을 하지 않는다. 앱 시작 때 미리 초기화한다 | `TTS_SERVICE` | 초기화가 실패하거나 5초 안에 끝나지 않으면 30초 뒤에 다시 시도한다 |
 | `speak(text, isFinal = true)` → `onStart`, `onDone`, `onStop`, `onError(ErrorType)` | 브리핑, 메모 다시 알림, 길 안내 질문, "오늘을 남길까요?", 다시 보기의 한마디, 편지 낭독. 한 문장씩 끝날 때까지 기다린다 | `TTS_SERVICE` | 실패하면 코디네이터가 같은 문장을 화면 아래 자막으로 읽을 시간만큼 보여 준다. 종료 이벤트가 오지 않으면 문장 길이에 맞춘 시간 뒤에 멈춘다 |
 | `stop()` | 출발(P 를 벗어남), 시동 끔, "그만", 화면 닫기 | `TTS_SERVICE` | - |
 | `removeEventListener`, `release` | 연결 해제 | - | - |
 
-화자는 지정하지 않고 플랫폼 기본 화자를 쓴다.
+화자는 초기화 직후 한 번 한국어 기본 화자(`haeun`)로 정한다. 정하지 않으면 앱에 저장된 값이나 차의 화자 설정을 따르기 때문이다.
 
 ## 5. SpeechToText SDK (`ai.pleos.playground:SpeechToText:3.3.1`, `PleosVoice.kt` 의 `PleosVoiceInput`)
 
@@ -150,7 +176,7 @@
 
 | 시뮬레이터 로그 | 같은 지점의 Pleos 어댑터 |
 |---|---|
-| `CarPropertyManager · IGNITION_STATE = ON / OFF` | 대응하는 API 없음. SDK 연결과 첫 값 수신으로 판단(`차량 값 수신 → 시동 ON 으로 봄`) |
+| `CarPropertyManager · IGNITION_STATE = ON / OFF` | 대응하는 API 없음. 운전석 착좌로 판단(`운전석 착석 → 탑승(시동 ON)으로 봄`, `운전석 비움(기어 P) → 내림(시동 OFF)으로 봄`) |
 | `CarPropertyManager · GEAR_SELECTION = P` | `Gear.onSelected → GEAR_PARK` (`GearSelectionListener`) |
 | `CarPropertyManager · PERF_ODOMETER = 12,872km` | `Odometer.onDistanceDrivenUpdated → 12,872km` |
 | `CarPropertyManager · SEAT_OCCUPANCY[조수석] = 착석` | `Seat.onSeatOccupancyUpdated(동승석) → 착석` |
@@ -166,7 +192,7 @@
 | `SpeechToText.request() · ko-KR` | `SpeechToText.request() · ON_DEVICE · ko-KR` |
 | `FusedLocation.addProximityAlert(마트, 300m)` | `FusedLocation.addProximityAlert(마트, 반경 300m) → 등록됨` |
 
-Pleos 모드에는 로그를 보여 주는 화면이 없다. 설정한 값은 Virtual Console 의 카드에서 확인한다.
+Pleos 모드에서는 시연 패널을 펴면 같은 자리에서 어댑터의 로그와 실내 상태를 본다. 설정한 값은 Virtual Console 의 카드에도 나타난다.
 
 ## 10. 플랫폼에 제안하는 API
 
@@ -174,7 +200,7 @@ Pleos 모드에는 로그를 보여 주는 화면이 없다. 설정한 값은 Vi
 
 | 제안 | 지금 구현 | 제안 내용 |
 |---|---|---|
-| 시동 이벤트 API | 시동 상태를 읽는 API 가 없어 SDK 연결과 첫 차량 값 수신을 시동 ON 으로 본다. 화면이 앞에 없어도 신호를 받도록 포그라운드 서비스가 연결을 유지한다 | 시동 순간 앱을 깨워 브리핑을 시작하게 한다 |
+| 시동 이벤트 API | 시동 상태를 읽는 API 가 없어 운전석 착좌(`SeatOccupancyListener`)를 탑승 신호로 쓴다. 화면이 앞에 없어도 신호를 받도록 포그라운드 서비스가 연결을 유지한다 | 시동 순간 앱을 깨워 브리핑을 시작하게 한다 |
 | 주행 세션 API | 기어, 누적 주행거리, 좌석, 내비 도착 이벤트를 앱(`TripTracker`)이 모아 한 번의 이동으로 묶는다. 도착은 NaviHelper 의 도착 이벤트로 안다 | 시동부터 정차까지를 한 번의 이동으로 묶어 출발지, 도착지, 거리, 시간을 한 번에 제공한다 |
 | 클러스터 표시 API | 중앙 화면에만 표시한다 | 계기판에 "N년 전 오늘"과 편지 도착을 표시한다 |
 | 사용자 프로필·현대자동차 계정 연동 API | 계정 원본을 앱 내부 JSON 파일로 대신하고, 좌석은 착석 수만 쓴다 | 가족이 각자 로그인해 공유받은 주제를 함께 꾸민다 |

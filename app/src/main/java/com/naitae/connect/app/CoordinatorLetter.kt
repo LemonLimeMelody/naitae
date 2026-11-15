@@ -79,6 +79,7 @@ internal fun NaitaeCoordinator.putOffLetter() {
     val arrived = screen as? Screen.LetterArrive ?: return
     stopAll()
     memory.postponedLetter = arrived.letter
+    saveSession()
     showHome()
 }
 

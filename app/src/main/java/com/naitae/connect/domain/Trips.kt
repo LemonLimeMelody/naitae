@@ -7,6 +7,7 @@ import com.naitae.connect.core.model.SceneKind
 import com.naitae.connect.vehicle.GearState
 import com.naitae.connect.vehicle.NaviEvent
 import com.naitae.connect.vehicle.SeatOccupancy
+import kotlinx.serialization.Serializable
 import java.time.LocalDate
 import java.time.LocalDateTime
 import kotlin.math.asin
@@ -25,6 +26,7 @@ import kotlin.math.sqrt
  *  - 그곳에서 시간을 보내고 다시 시동을 걸면(P) "오늘을 남길까요?" 를 묻는다(AskRecord).
  */
 
+@Serializable
 data class RecordDraft(
     val topicId: String?,
     val placeName: String,
@@ -35,6 +37,20 @@ data class RecordDraft(
     val seatCount: Int,
     val scheduleId: String?,
     val vin: String,
+)
+
+/**
+ * 프로세스가 다시 떠도 이어 가야 하는 이동 상태(파일에 저장한다).
+ * 주행거리·좌석처럼 차가 다시 알려 주는 값은 담지 않는다.
+ */
+@Serializable
+data class TripSnapshot(
+    val pendingDraft: RecordDraft? = null,
+    val parkedPlaceName: String? = null,
+    val ignitionSinceArrival: Boolean = false,
+    val routeTarget: Place? = null,
+    val askedRoutes: List<String> = emptyList(),
+    val arrivedPlaces: List<String> = emptyList(),
 )
 
 sealed interface TripSignal {
@@ -117,6 +133,28 @@ class TripTracker(
     /** 사용자가 남기거나 나중으로 미루면 초안을 비운다. */
     fun clearDraft() {
         pendingDraft = null
+    }
+
+    /** 지금의 이동 상태. 저장은 부르는 쪽이 한다. */
+    internal fun snapshot(): TripSnapshot = TripSnapshot(
+        pendingDraft = pendingDraft,
+        parkedPlaceName = parkedPlaceName,
+        ignitionSinceArrival = ignitionSinceArrival,
+        routeTarget = routeTarget,
+        askedRoutes = askedRoutes.sorted(),
+        arrivedPlaces = arrivedPlaces.sorted(),
+    )
+
+    /** 지난 프로세스가 남긴 이동 상태를 이어받는다. 신호를 받기 전에 한 번 부른다. */
+    internal fun restore(saved: TripSnapshot) {
+        pendingDraft = saved.pendingDraft
+        parkedPlaceName = saved.parkedPlaceName
+        ignitionSinceArrival = saved.ignitionSinceArrival
+        routeTarget = saved.routeTarget
+        askedRoutes.clear()
+        askedRoutes.addAll(saved.askedRoutes)
+        arrivedPlaces.clear()
+        arrivedPlaces.addAll(saved.arrivedPlaces)
     }
 
     /** 시나리오를 처음부터 다시 시작할 때(시뮬레이터에서 날짜를 바꿀 때) 이동 상태를 모두 비운다. */

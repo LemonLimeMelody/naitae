@@ -11,7 +11,7 @@
 |---|---|
 | 고친 것 | 9건(중간 6, 낮음 3). 모두 `vehicle/pleos/**` 안, 공개 시그니처 변경 없음 |
 | 그대로 둔 것 | 14건. 계약(파일) 변경이 필요하거나 에뮬레이터 없이는 옳고 그름을 가릴 수 없는 항목 |
-| 가장 큰 한계 | **시동(ignitionOn)**: SDK 에 시동 API 가 없어 "앱 프로세스가 차량 연결을 시작한 때 = 시동 ON". 지켜보는 서비스가 연결을 붙잡는 동안 OFF·ON 이 다시 나가지 않으므로, Pleos 모드에서는 프로세스당 시동 흐름이 한 번만 돈다(3절) |
+| 가장 큰 한계 | **시동(ignitionOn)**: SDK 에 시동 API 가 없음. 검수 뒤 운전석 착좌를 탑승 신호로 쓰도록 바꿈(3절, D 안 채택) |
 | 노트와 어댑터가 어긋난 곳 | 앰비언트 설정 권한은 어댑터가 맞음(`CONTROL_CAR_LIGHTS` 를 실행 중에 검사). `onRoutingCompleted` 의 뜻은 어댑터가 틀렸을 가능성이 높아 중립으로 바꿈(1절) |
 | 매니페스트 | 변경 필요 없음. 어댑터가 부르는 API 의 권한 13개가 모두 선언되어 있고 `RECORD_AUDIO` 는 필요 없음(5절) |
 
@@ -58,14 +58,14 @@
 
 | ID | 심각도 | 위치 | 내용 | 그대로 둔 이유 · 제안 |
 |---|---|---|---|---|
-| L-01 | 높음 | `PleosSignals.kt:27-33`, `:291` | 시동 ON·OFF 가 실제 시동과 다름. 3절 참고 | SDK 에 API 가 없음. 대안은 계약·앱 담당 결정 사항(3.3절) |
+| L-01 | 높음 | `PleosSignals.kt:27-33`, `:291` | 시동 ON·OFF 가 실제 시동과 다름. 3절 참고 | SDK 에 API 가 없음. 검수 뒤 운전석 탑승 신호로 바꿈(3절) |
 | L-02 | 중간 | `PleosCabin.kt:94`, `core/model/Models.kt:15-20` | 앱의 네 색 ARGB(`#FF8E6CC0` 등)가 차·에뮬레이터의 프리셋 값과 같다는 보장이 없음. Virtual Console 은 Cyan · Blue · Purple · White 4종만 표시 | 프리셋의 실제 값을 알 수 없음. 4절 5~6번으로 값을 확인한 뒤, 다르면 어댑터에 "앱 색 → 차 프리셋 ARGB" 표를 두는 것을 제안 |
 | L-03 | 중간 | `PleosCabin.kt:99-107` | 밝기 0 을 주면 스위치는 그대로 두고 최소 밝기만 설정. 원래 스위치가 꺼져 있던 차에서는 연출 뒤 조명이 켜진 채 남을 수 있음(`CabinState` 에 스위치 상태가 없음) | 계약에 스위치가 없고 Virtual Console 에도 스위치 카드가 없어 검증 불가. 제안: 밝기 0 = 스위치 OFF 로 약속하고 어댑터가 OFF 를 보냄 |
 | L-04 | 중간 | `PleosVoice.kt:97-129`, `:198` | `speak()` 는 `onDone` 을 '재생이 끝남'으로 믿고 기다림. 종료 이벤트가 전혀 오지 않으면 문장마다 10초 + 글자당 0.35초를 기다린 뒤 실패로 돌려줌 | 이벤트 뜻은 서비스 쪽 동작이라 AAR 로 알 수 없음(4절 10번). 이벤트가 안 오는 환경이 확인되면 "시작 이벤트 없음 → 빠른 실패"를 넣을 것 |
 | L-05 | 낮음 | `PleosSupport.kt:37-60` | `awaitSdk` 의 시간 초과는 '콜백이 안 옴'만 막음. SDK 호출 자체(메인 스레드의 바인더 호출)가 멈추면 막을 수 없음 | SDK 내부 큐가 스레드 안전하지 않아(LinkedList) 호출을 다른 스레드로 옮기지 않음 |
 | L-06 | 낮음 | `PleosCabin.kt` 제어 전반 | 1절 3번: 서비스 재연결 중에 보낸 set 은 시간 초과로 실패를 돌려준 뒤에도 연결되면 실행될 수 있음 | SDK 동작. 순서는 지켜지므로 마지막 요청이 최종 상태가 됨 |
 | L-07 | 낮음 | `PleosSignals.kt:215-220`, `PleosCabin.kt:309`, `:483-487` | 운전석 = `ROW_1_LEFT`(좌핸들 가정). 2열 가운데·3열은 `SeatOccupancy` 에 자리가 없어 세지 않음. 운전석 착좌는 항상 '탑승'으로 둠 | 한국 출시 차량 기준으로 맞음. 우핸들 지역은 대상 아님 |
-| L-08 | 낮음 | `PleosPlatform.kt:56` | `PleosPlatform.release()` 를 부르는 곳이 없음 → Vehicle · TTS · STT · FusedLocation 을 프로세스가 끝날 때까지 해제하지 않음 | 프로세스 수명 동안 쓰는 연결이라 동작에는 문제없음. 앱 담당이 종료 시점을 만들면 호출 |
+| L-08 | 낮음 | `PleosPlatform.kt:56` | `PleosPlatform.release()` 를 부르는 곳이 없음 → Vehicle · TTS · STT · FusedLocation 을 프로세스가 끝날 때까지 해제하지 않음 | 프로세스 수명 동안 쓰는 연결이라 동작에는 문제없음. 검수 뒤 `AppContainer.shutdown()`(`NaitaeApp.onTerminate`)이 부르게 함 |
 | L-09 | 낮음 | `vehicle/VehicleGateways.kt:176-178` | `SdkLog.add` 가 읽고-쓰기 두 단계라, 바인더 스레드의 이벤트 로그와 메인의 로그가 겹치면 한 줄이 사라질 수 있음(앱이 죽지는 않음) | 계약 파일. 제안: `_lines.update { (it + line).takeLast(MAX) }` |
 | L-10 | 낮음 | `PleosNavi.kt:143-182`, `:328` | `requestRoute` 는 연결 6초 + 시작 이벤트 5초까지 기다림. 코디네이터가 이 호출을 명령 줄(commandLock) 안에서 불러, 그동안 조명 되돌리기 같은 뒤 명령이 밀림 | 호출 방식은 app 담당. 내비가 시작 이벤트를 주지 않는 환경이면 `ROUTE_WAIT_MS` 를 줄일 것 |
 | L-11 | 낮음 | `PleosNavi.kt:153-155` | 즐겨찾기가 아닌 장소는 `poiId` · `address` · `poiSubId` 를 빈 문자열로 보냄 | 허용 여부는 문서에도 없음(4절 12번) |
@@ -73,42 +73,45 @@
 | L-13 | 정보 | `PleosSignals.kt:134-148` | VIN 을 못 읽는 환경(에뮬레이터에 VIN 카드 없음)에서는 시동 흐름마다 다시 묻고 최대 4초 기다림 | 값이 생기면 바로 반영하려는 의도. 지연이 보이면 실패도 잠시 기억하도록 변경 |
 | L-14 | 정보 | `PleosPlatform.kt:26` | `runtimePermissions` 를 쓰는 곳이 없음. `MainActivity` 가 선언된 권한 중 dangerous 를 스스로 골라 요청하므로 `FUSED_LOCATION` 은 요청됨 | 동작에 문제없음 |
 
-## 3. 시동(ignitionOn)의 가정과 한계
+## 3. 시동(ignitionOn): 운전석 탑승 신호로 확정
+
+검수 때의 정의("앱 프로세스가 차량 연결을 시작한 때 = 시동 ON", 프로세스당 한 번)로는 다시 시동을 거는 장면이 재현되지 않았다. 3.3절의 대안 가운데 **D 안(운전석 착좌)** 을 골라 구현했다.
 
 ### 3.1 지금 ignitionOn 이 뜻하는 것
 
 - Vehicle SDK 2.3.2 공개 API 에는 시동·전원 상태를 읽는 함수가 없음(1절 12번).
-- 어댑터의 정의: **ON** = `start()` 가 불리고 Vehicle 서비스에 연결되어 첫 값(기어 · 주행거리 · 좌석 · VIN)을 읽은 때(최대 3초 대기 뒤). **OFF** = `stop()` 이 불린 때.
-- `start()` / `stop()` 은 `AppContainer.hold` / `release` 가 부름. 붙잡는 곳은 화면(MainActivity)과 지켜보는 서비스(VehicleWatchService) 둘.
+- 어댑터의 정의: **차량 서비스에 연결된 채 운전석(`ROW_1_LEFT`)에 앉아 있음 = ON.** 판단은 `vehicle/pleos/DriverSeatIgnition.kt`(SDK 를 모르는 순수 로직, 단위 테스트 10개).
 
 | 상황 | ignitionOn | 코디네이터에서 일어나는 일 |
 |---|---|---|
-| 앱 프로세스가 처음 뜸(사용자가 앱 실행) | false → true | 시동 흐름 1회: 차 등록·이어받기 → 편지 → 하루 첫 브리핑 → 메모 → 길 안내 질문 |
-| 지켜보는 서비스가 살아 있는 동안 | 계속 true | 시동 흐름이 다시 돌지 않음. 날짜가 바뀌어도, 실제로 시동을 껐다 켜도 같음 |
-| 지켜보는 서비스가 뜨지 못했고 화면이 뒤로 감 → 다시 앞으로 옴 | true → false → true | 화면을 닫으면 '시동 OFF', 다시 열면 '시동 ON'으로 처리됨 |
-| 프로세스가 죽었다 다시 뜸 | false → true | 시동 흐름 1회. 단 `TripTracker` 의 이동 상태(도착한 곳, 기록 초안)는 메모리에만 있어 사라짐 |
+| 연결되어 첫 값을 읽은 때 운전석 착석 | false → true(바로) | 시동 흐름 1회 |
+| 운전석 Empty → Occupied | 1.5초 뒤 true | 시동 흐름 1회: 이어받기 → "오늘을 남길까요?" → 편지 → 하루 첫 브리핑 → 저녁 메모 → 길 안내 질문 |
+| 기어 P 에서 Occupied → Empty | 1.5초 뒤 false | 시동 OFF 처리(낭독·연출 중지, 조명 복원, 시동 꺼짐 화면) |
+| 1.5초 안에 되돌아온 착좌 신호 | 그대로 | 아무 일도 없음(흐름이 다시 시작되지 않음) |
+| 기어가 P 가 아닐 때의 Empty | 그대로 | 아무 일도 없음. P 가 되었을 때도 비어 있으면 그때부터 1.5초 뒤 false |
+| 운전석 착좌 값을 받은 적이 없음(센서 없음 · capability 에 없음 · 읽기 실패) | 첫 값을 읽은 때부터 true | 검수 때의 정의와 같음(프로세스당 1회) |
+| `stop()`(화면도 지켜보는 서비스도 연결을 놓음) | false | 시동 OFF 처리 |
 
-### 3.2 "하루 첫 시동" 로직이 동작하는 범위
+- 좌석 수(`seats`)에서는 운전석을 여전히 탑승으로 둠(L-07). 운전석 센서 값은 탑승 신호로만 씀.
+- 로그: `차량 값 수신 · 운전석 착석 → 탑승(시동 ON)으로 봄` / `… 운전석 비어 있음 → 탑승을 기다림` / `… 운전석 착좌 신호 없음 → 시동 ON 으로 봄`, 이후 `운전석 착석 → 탑승(시동 ON)으로 봄`, `운전석 비움(기어 P) → 내림(시동 OFF)으로 봄`.
 
-- 동작함: 그날 앱 프로세스가 **처음 뜬 때**의 브리핑(`BriefingEngine.shouldBrief` 가 날짜를 보므로 하루 한 번).
-- 동작하지 않음(Pleos 모드, 지켜보는 서비스가 연결을 붙잡는 정상 상태):
-  - 헤드유닛이 꺼지지 않고 대기(suspend)했다가 깨어나는 차에서 **다음 날 아침 시동** → ON 이 다시 나가지 않아 브리핑 없음
-  - **퇴근길 시동**의 메모 다시 알림(`MemoEngine.dueAtIgnition`)
-  - 도착해 시간을 보낸 뒤 **다시 시동을 걸 때**의 "오늘을 남길까요?"(`TripTracker` 가 도착 뒤의 `IgnitionOn` 을 기다림)
-  - 정한 날 시동에 열리는 편지(프로세스가 그날 처음 뜬 경우만 열림)
-- 부팅 때 스스로 뜨지 않으므로(노트 6.4절), 헤드유닛이 완전히 꺼졌다 켜지는 차에서도 사용자가 앱을 열어야 그날의 시동 흐름이 시작됨.
-- 에뮬레이터: Virtual Console 에 시동 카드가 없음. "시동" = 앱 실행. 다시 시동을 거는 장면은 앱을 강제 종료 후 재실행해야 하며, 이때 이동 상태는 사라짐.
+### 3.2 이 정의로 동작하는 범위
 
-### 3.3 대안(결정 필요, 이번 검수에서는 구현하지 않음)
+- 동작함: 하루 첫 탑승의 브리핑, 저녁에 다시 탔을 때의 메모 다시 알림, 도착해 시간을 보낸 뒤 다시 탔을 때의 "오늘을 남길까요?", 정한 날 탑승에 열리는 편지, 다음 날 아침의 브리핑(헤드유닛이 대기했다 깨어나는 차 포함. 프로세스가 살아 있으면 착좌 리스너가 그대로 받음).
+- 에뮬레이터: Virtual Console 의 Seat Occupancy 카드에서 운전석을 Occupied / Empty 로 바꾸는 것이 탑승 / 내림. 기본값이 Empty 면 앱은 시동 꺼짐 화면에서 기다림.
+- 프로세스가 죽었다 다시 뜨면 새 탑승으로 봄. 이동 상태(기록 초안, 세워 둔 곳, 이미 물은 길 안내, 미뤄 둔 편지)는 `files/naitae-session.json` 에서 이어받으므로 "오늘을 남길까요?"가 이어짐.
+- 남는 한계: 운전석 착좌를 알려 주지 않는 차에서는 검수 때와 같이 프로세스당 한 번. 부팅 때 스스로 뜨지 않으므로(노트 6.4절) 프로세스가 없으면 사용자가 앱을 열어야 그날의 흐름이 시작됨. 시동을 건 채 운전석을 비웠다 앉는 것(잠깐 내렸다 탐)도 새 탑승으로 봄.
 
-| 안 | 내용 | 맡을 곳 | 주의점 |
-|---|---|---|---|
-| A | 대기 후 깨어남 감지: `SystemClock.elapsedRealtime()` 과 코루틴 시계의 차이가 크게 벌어지면(대기했다 깨어남) OFF → ON 을 한 번 내보냄 | pleos | 에뮬레이터로 검증 불가. 실차의 대기 방식에 따라 달라짐 |
-| B | 날짜가 바뀌었고 기어가 P 면 시동 흐름을 다시 시작(코디네이터의 20초 시계가 이미 날짜 변화를 봄) | app | 하루 첫 브리핑만 해결. 퇴근길·남기기는 해결 안 됨 |
-| C | "도착 뒤 P 로 N분 이상 머문 다음 화면이 다시 앞에 옴"을 '다시 시동'으로 봄 | app · domain | 남기기 흐름을 에뮬레이터에서 시연할 수 있게 됨 |
-| D | 운전석 착좌(Virtual Console 에 카드 있음)를 시동의 대리 신호로 사용: Empty → Occupied = ON | pleos · 계약 | 에뮬레이터 기본값이 Empty 면 앱이 '시동 꺼짐'에 머묾. 착좌 센서가 없는 차 처리 필요 |
+### 3.3 검토한 대안과 결정
 
-`IgnitionState` enum 이 이미 SDK 에 들어 있어 다음 SDK 판에서 시동 API 가 열릴 가능성이 있음. 열리면 `PleosSignals.markAlive()` 자리만 바꾸면 됨.
+| 안 | 내용 | 결정 |
+|---|---|---|
+| A | 대기 후 깨어남 감지(`elapsedRealtime` 과 코루틴 시계의 차이) | 채택하지 않음. 에뮬레이터로 검증할 수 없음 |
+| B | 날짜가 바뀌었고 기어가 P 면 시동 흐름을 다시 시작 | 채택하지 않음. 하루 첫 브리핑만 해결됨 |
+| C | 도착 뒤 P 로 오래 머문 다음 화면이 다시 앞에 오면 '다시 시동' | 채택하지 않음. 화면 상태에 기대는 추정 |
+| **D** | **운전석 착좌를 탑승 신호로 사용: Empty → Occupied = ON, 기어 P 에서 Empty = OFF** | **채택.** Virtual Console 의 Seat Occupancy 카드로 시연할 수 있고, 착좌를 알 수 없는 차는 예전 동작으로 돌아감 |
+
+`IgnitionState` enum 이 이미 SDK 에 들어 있어 다음 SDK 판에서 시동 API 가 열릴 가능성이 있음. 열리면 `PleosSignals` 의 `boarding`(BoardingWatch) 입력만 바꾸면 됨.
 
 ## 4. 에뮬레이터·실차에서만 확인되는 가정 — Virtual Console 점검표
 
@@ -116,7 +119,7 @@
 
 | # | 조작(카드) | 앱 SDK 로그에 보여야 할 줄 | 확인하는 가정 | 다르게 나오면 |
 |---|---|---|---|---|
-| 1 | 앱 실행 | `Vehicle.initialize()` → `Vehicle 서비스 연결됨` → `차량 신호 수신 시작` → `Gear.registerGearSelection(listener)` → `Gear.getCurrentGearSelectionState() → GEAR_PARK` → `Odometer.getCurrentDistanceDriven() → …km` → `Seat.checkSeatOccupancyCapabilities() → 좌석 영역 N곳` → `CarInfo.getVINInfo() → …` → `차량 값 수신 → 시동 ON 으로 봄` → `나이테 · 시동 ON` | Pleos 판별(F-07), 연결 확인, 시동 가정 | `Pleos Vehicle 서비스 없음 … → 시뮬레이터로 실행` 이면 서비스 패키지·컴포넌트 이름 확인. `… need Permission` 이면 해당 권한 미부여 |
+| 1 | 앱 실행 | `Vehicle.initialize()` → `Vehicle 서비스 연결됨` → `차량 신호 수신 시작` → `Gear.registerGearSelection(listener)` → `Gear.getCurrentGearSelectionState() → GEAR_PARK` → `Odometer.getCurrentDistanceDriven() → …km` → `Seat.checkSeatOccupancyCapabilities() → 좌석 영역 N곳` → `CarInfo.getVINInfo() → …` → `차량 값 수신 · 운전석 착석 → 탑승(시동 ON)으로 봄`(운전석이 Empty 면 `… 운전석 비어 있음 → 탑승을 기다림`) → 탑승이면 `나이테 · 시동 ON` | Pleos 판별(F-07), 연결 확인, 탑승 신호(3절) | `Pleos Vehicle 서비스 없음 … → 시뮬레이터로 실행` 이면 서비스 패키지·컴포넌트 이름 확인. `… need Permission` 이면 해당 권한 미부여 |
 | 2 | Motion · Gear Selection: P → D → P | `Gear.onSelected → GEAR_DRIVE`, `Gear.onSelected → GEAR_PARK`. D 에서 화면 입력이 잠김 | 기어 구독, 주행 중 잠금 | 이벤트가 없으면 `Gear 리스너 오류 …` 확인 |
 | 3 | Motion · Odometer: 값을 10 올림 | `Odometer.onDistanceDrivenUpdated → 12,850km` 형태 | 단위가 km | 값이 1000배면 단위가 m |
 | 4 | Convenience · Seat Occupancy: 동승석 Occupied, 이어서 운전석 Empty | `Seat.onSeatOccupancyUpdated(동승석) → 착석`, `Seat.onSeatOccupancyUpdated(운전석) → 비어 있음` | `ROW_1_LEFT` = 운전석, `ROW_1_RIGHT` = 동승석(L-07) | 운전석 카드에 `(동승석)` 이 찍히면 좌우를 바꿔야 함 |
@@ -130,8 +133,8 @@
 | 12 | "○○로 안내할까요?" → 안내받기 | `NaviHelper.initialize(onConnected, onFailed)`, `내비게이션 서비스 연결됨`, `NaviHelper.addListener(listener)`, `NaviHelper.requestRoute(장소 · 위도 …, 경도 …)`, `NaviHelper.onRouteStarted → … · …km`. 내비 지도의 목적지가 그 장소 | 좌표 순서, 빈 `poiId` 허용(L-11), **`onRouteStarted` 와 `onRoutingCompleted` 가 언제 오는지**(F-03) | 15초 뒤 `내비게이션 서비스 연결 실패` 면 에뮬레이터에 내비 없음. `onError → CAUSE_SEARCH_ROUTE` 면 POI 정보 필요 |
 | 13 | (실차 또는 내비 모의 주행) 목적지 도착 | `NaviHelper.onDestinationArrived → 이름 · 12.3km · 25분` | 거리 m, 시간 초 | 값이 터무니없으면 단위 재확인. Virtual Console 로는 재현 불가(노트 7.4절) |
 | 14 | 장소 메모를 만든 상태로 앱 실행 → 권한 창에서 허용 | 권한 창에 `FUSED_LOCATION` 이 뜸. `FusedLocation.isSupported() → 지원`, `FusedLocation.initialize()`, `FusedLocation.addProximityAlert(장소, 반경 300m) → 등록됨`. 위치를 그 장소로 옮기면 `FusedLocation.onTransition(장소) → 가까워짐` | dangerous 권한 요청 경로, 등록 응답, 이미 반경 안일 때의 첫 전이(F-05) | 거부하면 `위치 권한(…)이 아직 허용되지 않음`. 에뮬레이터 위치가 FusedLocation 에 반영되는지는 미확인 |
-| 15 | 앱을 켠 채 날짜를 넘기거나 오래 둔 뒤 다시 봄 | `나이테 · 시동 ON` 이 **다시 나오지 않음** | 3절의 한계 | 다시 나오면 지켜보는 서비스가 떠 있지 않은 것(`지켜보는 서비스를 … 못함` 로그) |
-| 16 | 첫 실행 직후 화면 | 에뮬레이터의 VIN 이 가상 데이터의 차(`VIN_FIRST_CAR`)와 다르면 `나이테 · 새 차(VIN 다름) → 이어받기 …` 와 이어받기 화면이 먼저 뜸 | VIN 을 읽을 수 있는 환경에서의 첫 화면 | 의도한 시연 순서가 아니면 app · domain 담당이 Pleos 모드의 첫 차 등록 방식을 정해야 함 |
+| 15 | Seat Occupancy: 기어 P 에서 운전석 Empty → 2초 뒤 Occupied | `Seat.onSeatOccupancyUpdated(운전석) → 비어 있음` → 1.5초 뒤 `운전석 비움(기어 P) → 내림(시동 OFF)으로 봄`, `나이테 · 시동 OFF` → `Seat.onSeatOccupancyUpdated(운전석) → 착석` → 1.5초 뒤 `운전석 착석 → 탑승(시동 ON)으로 봄`, `나이테 · 시동 ON` | 운전석 착좌 값과 리스너가 에뮬레이터에서 오는지(3절) | `차량 값 수신 · 운전석 착좌 신호 없음 → 시동 ON 으로 봄` 이면 운전석 영역이 capability 에 없거나 읽기 실패 → 예전 동작(프로세스당 한 번) |
+| 16 | 첫 실행 뒤 운전석 Occupied | `나이테 · '평일 · 출근길' 아침까지의 데이터로 바꿈` → `나이테 · 하루 첫 시동 → 브리핑 5줄`. 이어받기 로그(`새 차(VIN 다름)`)는 나오지 않음 | 가상 데이터의 첫 차를 차가 알려 준 VIN 으로 등록(시연 패널의 날짜를 고를 때마다) | 이어받기 화면이 뜨면 날짜를 고른 뒤에 VIN 이 처음 읽힌 것 → 같은 날짜 버튼을 다시 누름 |
 
 ## 5. 매니페스트
 

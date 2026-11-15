@@ -6,6 +6,7 @@ import com.naitae.connect.core.model.Memo
 import com.naitae.connect.core.model.NaitaeData
 import com.naitae.connect.data.NaitaeRepository
 import com.naitae.connect.data.SeedData
+import com.naitae.connect.data.SessionStore
 import com.naitae.connect.domain.LetterPerformer
 import com.naitae.connect.domain.MemoEngine
 import com.naitae.connect.domain.RingBuilder
@@ -18,6 +19,7 @@ import com.naitae.connect.ui.Screen
 import com.naitae.connect.ui.UiState
 import com.naitae.connect.vehicle.GearState
 import com.naitae.connect.vehicle.NaviEvent
+import com.naitae.connect.vehicle.PlatformKind
 import com.naitae.connect.vehicle.ProximityEvent
 import com.naitae.connect.vehicle.RecordedVoicePlayer
 import com.naitae.connect.vehicle.ScenarioDay
@@ -69,6 +71,8 @@ class NaitaeCoordinator(
     internal val repository: NaitaeRepository,
     internal val recorded: RecordedVoicePlayer,
     private val scope: CoroutineScope,
+    /** 프로세스가 다시 떠도 이어 갈 이동 상태를 두는 곳(Pleos 모드). 없으면 저장하지 않는다. */
+    private val session: SessionStore? = null,
 ) : NaitaeActions {
 
     private val _ui = MutableStateFlow(UiState(platform = platform.kind))
@@ -128,6 +132,7 @@ class NaitaeCoordinator(
     fun start() {
         if (started) return
         started = true
+        val resumed = resumeSession()
         val signals = platform.signals
         // StateFlow 는 구독하자마자 지금 값을 주므로, 시동 신호를 가장 나중에 걸어 다른 값이 먼저 자리 잡게 한다.
         collect("cabin", platform.cabin.state) { cabin -> _ui.update { it.copy(cabin = cabin) } }
@@ -144,8 +149,12 @@ class NaitaeCoordinator(
         collect("navi", platform.navi.events) { onNavi(it) }
         collect("proximity", platform.proximity.events) { onProximity(it) }
         platform.console?.let { console ->
+            var first = true
             collect("day", console.state.map { scenarioStart(it) }.distinctUntilChanged()) { (day, atStart) ->
-                if (day != resetDay || atStart) {
+                // 지난 실행을 이어 가는 중이면 첫 값은 날짜를 고른 것이 아니다(데이터를 다시 만들지 않는다).
+                val resuming = first && resumed && day == resetDay
+                first = false
+                if (!resuming && (day != resetDay || atStart)) {
                     resetDay = day
                     val job = scope.launch { guarded("day") { resetForDay(day) } }
                     dayReset = job
@@ -172,6 +181,32 @@ class NaitaeCoordinator(
      */
     private fun scenarioStart(state: SimState): Pair<ScenarioDay, Boolean> =
         state.day to (state.now == SeedData.dateTimeOf(state.day))
+
+    /**
+     * 지난 프로세스가 남긴 이동 상태(기록 초안, 세워 둔 곳, 이미 물은 길 안내, 미뤄 둔 편지)를 이어받는다.
+     * 시연 날짜가 같을 때만 이어받고, 이어받았으면 true.
+     */
+    private fun resumeSession(): Boolean {
+        val saved = session?.restored ?: return false
+        val console = platform.console
+        if (console != null) {
+            val day = console.state.value.day
+            if (saved.day != day.name) return false
+            resetDay = day
+        }
+        tracker.restore(saved.trip)
+        memory.postponedLetter = data.letters.firstOrNull { it.id == saved.postponedLetterId && it.openedEpochDay == null }
+        SdkLog.sys("나이테 · 지난 실행의 이동 상태를 이어 감")
+        return true
+    }
+
+    /** 이동 상태가 바뀔 수 있는 곳마다 부른다. 바뀐 것이 없으면 파일에 쓰지 않는다. */
+    internal fun saveSession() {
+        val store = session ?: return
+        val trip = tracker.snapshot()
+        val letterId = memory.postponedLetter?.id
+        store.update { it.copy(trip = trip, postponedLetterId = letterId) }
+    }
 
     // ───────── 차의 신호 ─────────
 
@@ -243,7 +278,10 @@ class NaitaeCoordinator(
     private fun leave(leaving: Screen, running: Job?) {
         when (leaving) {
             is Screen.LetterOpen -> endLetter(leaving.letter, running, keepLight = false)
-            is Screen.LetterArrive -> memory.postponedLetter = leaving.letter
+            is Screen.LetterArrive -> {
+                memory.postponedLetter = leaving.letter
+                saveSession()
+            }
             is Screen.Handover -> releaseLetterLight()
             is Screen.RecordEdit -> memory.selectedTopicId = leaving.topic.id
             is Screen.Decorate -> memory.selectedTopicId = leaving.topic.id
@@ -314,6 +352,8 @@ class NaitaeCoordinator(
                 is TripEffect.DraftReady -> SdkLog.sys("나이테 · ${effect.draft.placeName} 기록 초안 준비 → 묻지 않음")
             }
         }
+        // 주행거리·좌석은 이동 상태를 바꾸지 않고 자주 오므로 건너뛴다.
+        if (signal !is TripSignal.Odometer && signal !is TripSignal.Seats) saveSession()
     }
 
     private fun newTracker(): TripTracker = TripTracker(
@@ -337,8 +377,20 @@ class NaitaeCoordinator(
         platform.signals.odometerKm.value?.let { feed(TripSignal.Odometer(it)) }
         feed(TripSignal.Seats(platform.signals.seats.value))
         show(Screen.EngineOff)
-        repository.replace(SeedData.forDay(day))
+        repository.replace(seedFor(day))
         if (ignition && screen is Screen.EngineOff && interaction == null) showHome()
+    }
+
+    /**
+     * 그날 아침까지의 가상 데이터. Pleos 모드에서는 가상 데이터의 첫 차를 차가 알려 준 VIN 으로 맞춰,
+     * 평소의 날 첫 탑승에 이어받기가 뜨지 않게 한다. '20년 뒤'는 새 차의 날이라 등록된 차를 그대로 둔다
+     * (그날은 차의 VIN 이 등록된 차와 달라야 이어받기가 돈다).
+     */
+    private suspend fun seedFor(day: ScenarioDay): NaitaeData {
+        val seed = SeedData.forDay(day)
+        if (platform.kind != PlatformKind.PLEOS || day == ScenarioDay.TWENTY_YEARS_LATER) return seed
+        val vin = platform.signals.vin() ?: return seed
+        return SeedData.withFirstCarVin(seed, vin)
     }
 
     /** 날짜를 바꾸는 중이면 끝날 때까지 기다린다(옛 데이터로 시동 흐름이 돌지 않게). */
@@ -634,6 +686,7 @@ class NaitaeCoordinator(
             if (screen is Screen.RecordAsk) {
                 stopAll()
                 tracker.clearDraft()
+                saveSession()
                 showHome()
             }
         }

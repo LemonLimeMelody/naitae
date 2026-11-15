@@ -92,6 +92,27 @@ object SeedData {
         ScenarioDay.TWENTY_YEARS_LATER -> LocalDateTime.of(2046, 11, 15, 11, 5)
     }
 
+    /** 시연에서 '목적지 도착'을 넣을 때 쓰는, 그 장소까지 달린 거리(km) */
+    fun demoDistanceKm(place: Place): Float = when (place.name) {
+        OFFICE.name -> 18f
+        PIER.name -> 32f
+        ARBORETUM.name -> 41f
+        MART.name -> 6f
+        else -> 10f
+    }
+
+    /**
+     * 가상 데이터의 첫 차(그랜저)를 지금 차의 VIN 으로 바꾼다(차 목록과 그 차로 남긴 기록 모두).
+     * Pleos 에뮬레이터처럼 차가 알려 주는 VIN 이 가상 데이터와 다른 환경에서, 평소의 날에 이어받기가 뜨지 않게 한다.
+     */
+    fun withFirstCarVin(data: NaitaeData, vin: String): NaitaeData {
+        if (vin.isBlank() || vin == VIN_FIRST_CAR) return data
+        return data.copy(
+            cars = data.cars.map { if (it.vin == VIN_FIRST_CAR) it.copy(vin = vin) else it },
+            records = data.records.map { if (it.vin == VIN_FIRST_CAR) it.copy(vin = vin) else it },
+        )
+    }
+
     /** 그날 시동을 걸기 전까지 쌓여 있어야 할 데이터 */
     fun forDay(day: ScenarioDay): NaitaeData = base(dateTimeOf(day).toLocalDate())
 

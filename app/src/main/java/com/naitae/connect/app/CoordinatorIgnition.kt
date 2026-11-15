@@ -88,6 +88,7 @@ private suspend fun NaitaeCoordinator.ignitionSequence() {
 internal fun NaitaeCoordinator.takePostponedLetter(): FutureLetter? {
     val letter = memory.postponedLetter ?: return null
     memory.postponedLetter = null
+    saveSession()
     return letter.takeIf { waiting -> data.letters.any { it.id == waiting.id && it.openedEpochDay == null } }
 }
 

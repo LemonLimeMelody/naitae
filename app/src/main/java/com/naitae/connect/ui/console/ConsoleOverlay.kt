@@ -73,9 +73,16 @@ private val WideWidth = 480.dp
 /** 음성 입력을 흉내 낼 때 고르는 말(시나리오의 한마디) */
 private val SayPresets = listOf("내일 세차 예약", "올해 첫 감성돔", "아빠, 내년에 또 오자!", "안내해 줘")
 
+/** 시연 패널에서 차의 신호를 어디서 넣는지 알려 주는 한 줄 */
+private const val VIRTUAL_CONSOLE_HINT =
+    "기어 · 좌석(운전석 = 탑승) · 조명 · 공조는 Pleos Virtual Console 에서 바꿉니다: " +
+        "adb forward tcp:8088 tcp:8088 → http://127.0.0.1:8088/"
+
 /**
- * 가상 콘솔 패널. 시뮬레이터일 때만 화면 오른쪽에 붙는다(너비 360~420dp 기준).
+ * 가상 콘솔 패널. 화면 오른쪽에 붙는다(너비 360~420dp 기준).
  * 날짜 6개, 시동/기어, 목적지 도착, 좌석 착석, 시각, 다음에 할 말, 지금 값, SDK 호출 로그(SdkLog.lines).
+ * Pleos 모드의 시연 패널(console.controlsVehicle 이 false)에서는 차의 신호를 넣는 시동/기어·좌석 묶음을 빼고,
+ * 그 신호를 Pleos Virtual Console 에서 넣는다는 안내 한 줄을 보여 준다.
  * 위쪽 조작부는 길면 스크롤되고, 로그는 남은 높이를 쓰며 새 줄이 오면 맨 아래로 따라간다.
  * 누르는 것(조작)을 위에, 읽기만 하는 것(지금 값)을 아래에 두어 큰 화면에서는 스크롤 없이 모든 조작이 보이게 한다.
  * cabin 을 넘기면 지금 값에 실내(조명·열선·공조)도 보여 준다.
@@ -95,7 +102,14 @@ fun ConsoleOverlay(console: SimulatorConsole, modifier: Modifier = Modifier, cab
             modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            PanelTitle("가상 콘솔", "Virtual Console 입력을 흉내 냄")
+            // 시연 패널은 실제 차에 연결되어 있다. 기어·좌석은 여기서 넣지 않는다.
+            val simulated = console.controlsVehicle
+            if (simulated) {
+                PanelTitle("가상 콘솔", "Virtual Console 입력을 흉내 냄")
+            } else {
+                PanelTitle("시연 패널", "Pleos 모드 · 날짜 · 도착 · 할 말")
+                Text(VIRTUAL_CONSOLE_HINT, color = LogEvent, fontSize = 14.sp, lineHeight = 19.sp)
+            }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -113,7 +127,7 @@ fun ConsoleOverlay(console: SimulatorConsole, modifier: Modifier = Modifier, cab
                         )
                     }
                 }
-                ControlGroup("차") {
+                if (simulated) ControlGroup("차") {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         ConsoleButton("시동", sim.ignitionOn, { console.ignition(true) }, Modifier.weight(1f))
                         ConsoleButton(
@@ -132,7 +146,7 @@ fun ConsoleOverlay(console: SimulatorConsole, modifier: Modifier = Modifier, cab
                     }
                 }
                 if (console.places.isNotEmpty()) {
-                    ControlGroup("목적지 도착 (즐겨찾기 = 주제 장소)") {
+                    ControlGroup(if (simulated) "목적지 도착 (즐겨찾기 = 주제 장소)" else "목적지 도착 이벤트 넣기 (기어는 그대로)") {
                         ButtonGrid(console.places, columns = if (wide) 4 else 3) { place, cell ->
                             ConsoleButton(
                                 text = place.name,
@@ -143,7 +157,7 @@ fun ConsoleOverlay(console: SimulatorConsole, modifier: Modifier = Modifier, cab
                         }
                     }
                 }
-                ControlGroup("좌석 착석 (운전석 · 조수석 · 뒷좌석 왼쪽 · 오른쪽)") {
+                if (simulated) ControlGroup("좌석 착석 (운전석 · 조수석 · 뒷좌석 왼쪽 · 오른쪽)") {
                     val occupied = listOf(
                         sim.seats.driver,
                         sim.seats.frontPassenger,
@@ -191,7 +205,7 @@ fun ConsoleOverlay(console: SimulatorConsole, modifier: Modifier = Modifier, cab
                         )
                     }
                 }
-                ControlGroup("다음에 할 말 (음성 입력 흉내)") {
+                ControlGroup(if (simulated) "다음에 할 말 (음성 입력 흉내)" else "다음에 할 말 (마이크 대신)") {
                     ButtonGrid(SayPresets, columns = if (wide) 4 else 2) { text, cell ->
                         ConsoleButton(
                             text = text,
@@ -208,7 +222,8 @@ fun ConsoleOverlay(console: SimulatorConsole, modifier: Modifier = Modifier, cab
                 Spacer(Modifier.height(2.dp))
                 ControlGroup("지금 값") {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ValueTile("기어", gearLabel(sim), Modifier.weight(0.7f))
+                        if (!simulated) ValueTile("탑승", if (sim.ignitionOn) "탑승" else "내림", Modifier.weight(0.7f))
+                        ValueTile("기어", gearLabel(sim, always = !simulated), Modifier.weight(0.7f))
                         ValueTile("주행거리", odometerLabel(sim.odometerKm), Modifier.weight(1.2f))
                         ValueTile("VIN 끝자리", vinTail(sim.vin), Modifier.weight(1.2f))
                     }
@@ -362,8 +377,9 @@ private fun SdkLogBox(lines: List<SdkLogLine>, modifier: Modifier = Modifier) {
     }
 }
 
-private fun gearLabel(sim: SimState): String {
-    if (!sim.ignitionOn) return "-"
+/** 시뮬레이터는 시동이 꺼지면 기어를 비워 보이고, 시연 패널(always)은 차가 알려 준 기어를 늘 보여 준다. */
+private fun gearLabel(sim: SimState, always: Boolean = false): String {
+    if (!sim.ignitionOn && !always) return "-"
     return when (sim.gear) {
         GearState.PARK -> "P"
         GearState.REVERSE -> "R"

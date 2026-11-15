@@ -3,7 +3,7 @@
 에뮬레이터 없이 JVM(Robolectric)에서 앱의 실제 객체 그래프와 실제 화면을 띄워, 여섯 날의 시나리오를 처음부터 끝까지 돌려 본 기록이다.
 기준 문서는 `docs/ARCHITECTURE.md` 1절(원칙)·5절(기대 동작)·6절(코디네이터 흐름).
 
-- 마지막 실행: `:app:testDebugUnitTest` 81개 통과(실패 0, 건너뜀 0) · `:app:assembleDebug` 성공
+- 마지막 실행: `:app:testDebugUnitTest` 115개 통과(실패 0, 건너뜀 0) · `:app:assembleDebug` 성공
 - 구성: 기존 도메인·저장소 단위 테스트 37개 + e2e 44개(`app/src/test/java/com/naitae/connect/e2e/`)
 - 화면 캡처: `docs/screenshots/` 34장(가상 콘솔 포함) + `docs/screenshots/fullwidth/` 34장(콘솔을 접은 전체 너비 = 실제 차의 배치)
 
@@ -13,7 +13,7 @@
 export JAVA_HOME="/c/Program Files/Java/jdk-21"
 cd /c/naitae
 
-./gradlew :app:testDebugUnitTest --console=plain          # 전체 81개, 캡처 68장을 다시 만든다(1분 안팎)
+./gradlew :app:testDebugUnitTest --console=plain          # 전체 115개, 캡처 68장을 다시 만든다(1분 안팎)
 ./gradlew :app:testDebugUnitTest --tests '*ScenarioE2eTest*'   # 시나리오만(화면 없이, 수 초)
 ./gradlew :app:testDebugUnitTest --tests '*ScreenshotE2eTest*' # 캡처만 다시
 ./gradlew :app:assembleDebug

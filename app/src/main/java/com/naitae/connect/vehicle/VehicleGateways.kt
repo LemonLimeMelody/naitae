@@ -34,7 +34,11 @@ data class SeatOccupancy(
 
 /** 차가 알려 주는 신호 (읽기) */
 interface VehicleSignals {
-    /** 시동(전원) 상태. Pleos 구현은 SDK 연결·기어 이벤트로 판단한다. */
+    /**
+     * 시동 또는 운전석 탑승(플랫폼이 알려 줄 수 있는 가장 가까운 신호).
+     * Pleos 구현은 SDK 에 시동 신호가 없어 '차량 서비스에 연결된 채 운전석에 앉아 있음'으로 판단하고,
+     * 운전석 착좌를 알 수 없는 차에서는 연결되어 첫 값을 받은 때부터 켜진 것으로 본다.
+     */
     val ignitionOn: StateFlow<Boolean>
     val gear: StateFlow<GearState>
     /** 누적 주행거리(km). 아직 모르면 null */
@@ -153,7 +157,7 @@ class VehiclePlatform(
     val voiceIn: VoiceInput,
     val proximity: ProximityGateway,
     val clock: AppClock,
-    /** 시뮬레이터일 때만 있음 */
+    /** 시뮬레이터의 가상 콘솔. Pleos 모드에서는 시연 패널(vehicle/demo)이 들어온다. */
     val console: SimulatorConsole? = null,
 )
 
@@ -212,6 +216,13 @@ data class SimState(
 
 interface SimulatorConsole {
     val state: StateFlow<SimState>
+
+    /**
+     * 이 콘솔이 차의 신호(시동·기어·좌석)까지 넣는지. Pleos 시연 패널은 false:
+     * 그 신호는 Pleos Virtual Console 이 넣고, ignition · gear · setSeat 는 아무 일도 하지 않는다.
+     */
+    val controlsVehicle: Boolean get() = true
+
     /** 목적지 버튼으로 쓸 장소(회사·낚시터·수목원 등) */
     val places: List<Place>
     /** 날짜를 바꾼다. 시동은 꺼지고, 날짜에 맞는 시각·좌석·주행거리·차(VIN)가 정해진다. */

@@ -48,14 +48,14 @@
 |---|---|---|---|
 | 기어 P 판단, 주행 중 잠금 | Vehicle 2.3.2 | `Gear.getCurrentGearSelectionState`, `registerGearSelection` | `CAR_DRIVE` |
 | 이번 이동 거리 | Vehicle | `Odometer.getCurrentDistanceDriven`, `registerDistanceDriven` | `CAR_DRIVE` |
-| 좌석 수(함께한 날 여부) | Vehicle | `Seat.checkSeatOccupancyCapabilities`, `getCurrentSeatOccupancy`, `registerSeatOccupancy` | `CAR_SEATS` |
+| 운전석 탑승 신호, 좌석 수(함께한 날 여부) | Vehicle | `Seat.checkSeatOccupancyCapabilities`, `getCurrentSeatOccupancy`, `registerSeatOccupancy` | `CAR_SEATS` |
 | 새 차 이어받기 | Vehicle | `CarInfo.getVINInfo` | `CAR_INFO` |
 | 기록의 색, 다시 보기, 편지의 실내 조명 | Vehicle | `Light.checkAmbientLight{BrightnessColor,Brightness,Switch}Capabilities`, `setAmbientLightSwitch`, `setAmbientLightBrightnessColor`, `setAmbientLightBrightness`, `getAmbientLightBrightness`, `getAmbientLightBrightnessColor` | `CAR_LIGHTS`, `CONTROL_CAR_LIGHTS` |
 | 편지의 시트 열선 | Vehicle | `Seat.checkSeatTemperatureCapabilities`, `setHvacSeatTemperature`, `getHvacSeatTemperature` | `CAR_SEATS`, `CONTROL_CAR_SEATS` |
 | 편지의 핸들 열선 | Vehicle | `SteeringWheel.checkHvacSteeringWheelHeatCapabilities`, `setHvacSteeringWheelHeat`, `getHvacSteeringWheelHeatState` | `CAR_CLIMATE`, `CONTROL_CAR_CLIMATE` |
 | 편지의 온도·풍량 | Vehicle | `HVAC.checkHvac{Temperature,FanSpeed,Power}Capabilities`, `getHvacPowerState`, `setHvacPower`, `setHvacTemperature`, `setHvacFanSpeed`, `getHvacTemperature`, `getHvacFanSpeed` | `CAR_CLIMATE`, `CONTROL_CAR_CLIMATE` |
 | 길 안내 요청, 도착 감지 | NaviHelper 3.0.5 | `initialize`, `addListener`, `requestRoute(RouteInfo)`, `getDestinationInfo`, 이벤트 `onRouteStarted` · `onRoutingCompleted` · `onRouteCancelled` · `onDestinationInfo` · `onDestinationArrived` · `onError` | `NAVI_ROUTE`, `NAVI_ROUTE_SEARCH` |
-| 브리핑·메모·편지 낭독 | TextToSpeech 3.3.1 | `TextToSpeech(context, Mode.ON_DEVICE)`, `initialize`, `setLocale(Locale.KOREA)`, `addEventListener`, `speak`, `stop` | `TTS_SERVICE` |
+| 브리핑·메모·편지 낭독 | TextToSpeech 3.3.1 | `TextToSpeech(context, Mode.ON_DEVICE)`, `initialize`, `setLocale(Locale.KOREA)`, `setSpeakerType("haeun")`, `addEventListener`, `speak`, `stop` | `TTS_SERVICE` |
 | 말로 메모·한마디 받기 | SpeechToText 3.3.1 | `SpeechToText(context, Mode.ON_DEVICE)`, `initialize`, `setLocale(Locale.KOREA)`, `addListener`, `request`, `stop` | `STT_SERVICE` |
 | 장소를 붙인 메모의 근접 알림 | FusedLocation 1.1.3 | `isSupported`, `initialize`, `addProximityAlert(ProximityAlertRequest)`, `removeProximityAlert`. 장소를 붙인 메모가 계정에 있을 때 등록한다(가상 데이터에는 없다) | `FUSED_LOCATION` (실행 중 허용) |
 
@@ -90,17 +90,23 @@ Windows 에서는 `gradlew.bat` 을 쓴다. release 빌드는 바로 설치할 �
 
    PC 브라우저에서 `http://127.0.0.1:8088/` 을 연다.
 
-앱은 Pleos Vehicle 서비스를 찾으면 Pleos 모드로 실행된다. 이 모드에서는 앱이 차량 서비스에 연결되어 기어 값을 처음 받은 때를 시동 ON 으로 보고, 날짜는 기기 시계를 쓴다. 가상 데이터는 첫 실행 날짜를 기준으로 만든다. 차량에서 VIN 을 읽으면 가상 데이터의 차와 달라 첫 실행에 이어받기 화면이 먼저 열린다.
+앱은 Pleos Vehicle 서비스를 찾으면 Pleos 모드로 실행된다. 이 모드의 동작은 다음과 같다.
+
+- 탑승 신호: Vehicle SDK 에는 시동 신호가 없다. 앱은 차량 서비스에 연결된 채 운전석에 앉아 있는 것을 시동(탑승)으로 본다. Virtual Console 의 Seat Occupancy 카드에서 운전석을 Occupied 로 바꾸면 1.5초 뒤 시동 흐름이 시작되고, 기어 P 에서 Empty 로 바꾸면 1.5초 뒤 시동이 꺼진 것으로 처리한다. 운전석 착좌를 알려 주지 않는 차에서는 차량 서비스에 연결된 때부터 시동이 걸린 것으로 본다.
+- 시연 패널: 화면 오른쪽 끝의 손잡이(`‹`)를 누르면 시연 패널이 열린다. Virtual Console 에 없는 날짜 6개, 시각, 목적지 도착 이벤트, 마이크 대신 넣을 말을 여기서 넣고, 지금 값(탑승, 기어, 주행거리, VIN 끝자리, 실내 조명·열선·공조)과 SDK 호출 로그를 본다. 기어, 좌석, 조명, 공조는 Virtual Console 에서 바꾼다.
+- 날짜와 데이터: 시계는 시나리오 날짜(첫 실행은 2026-11-12 07:42)에서 시작해 실제 시간만큼 흐른다. 시연 패널에서 날짜를 고르면 그날 아침까지의 가상 데이터로 바뀌고, 가상 데이터의 차는 차량에서 읽은 VIN 으로 등록된다. 그래서 첫 실행의 첫 탑승은 평일 브리핑이다. "20년 뒤" 날짜에서만 등록된 차와 지금 차의 VIN 이 달라 이어받기가 진행된다(VIN 을 읽을 수 없는 환경에서는 정해 둔 새 차 VIN 을 쓴다).
+- 다시 실행: 시연 날짜·시각과 이동 상태(도착해서 준비한 기록 초안, 세워 둔 곳, 이미 물은 길 안내, 미뤄 둔 편지)를 `files/naitae-session.json` 에 두어, 앱이 종료됐다 다시 실행되어도 이어 간다.
 
 | Virtual Console 카드 | 앱이 받거나 설정하는 API | 앱 동작 |
 |---|---|---|
 | Gear Selection (P/R/N/D) | `GearSelectionListener.onSelected` | P 에서 시동 흐름과 화면 조작을 허용한다. P 가 아니면 낭독·연출을 멈추고 터치를 잠근다 |
 | Odometer | `DistanceDrivenListener.onDistanceDrivenUpdated` | 이번 이동 거리 계산, 이어받기 화면의 새 차 주행거리 |
+| Seat Occupancy (운전석) | `SeatOccupancyListener.onSeatOccupancyUpdated` | 탑승 신호. Occupied 로 바꾸면 시동 흐름(브리핑, 편지, "오늘을 남길까요?")이 시작되고, 기어 P 에서 Empty 로 바꾸면 시동이 꺼진 것으로 처리한다 |
 | Seat Occupancy (동승석 · 뒷좌석 좌우) | `SeatOccupancyListener.onSeatOccupancyUpdated` | 기록의 좌석 수, 새 차 첫 시동의 편지를 바로 열지 먼저 물을지 |
 | Ambient Color · Ambient Brightness | `Light.setAmbientLightBrightnessColor`, `setAmbientLightBrightness` | 함께 꾸미기에서 고른 색, 다시 보기, 편지 연출의 값이 카드에 나타난다 |
 | Seat Temperature · Steering Wheel Heat · Target Temperature · Fan Speed | `Seat.setHvacSeatTemperature`, `SteeringWheel.setHvacSteeringWheelHeat`, `HVAC.setHvacTemperature`, `setHvacFanSpeed` | 미래 편지 연출의 값이 카드에 나타난다 |
 
-Virtual Console 에는 내비게이션 도착, 위치, 차량 속도, VIN 카드가 없다. 도착이 필요한 장면(남기기, 다시 보기)과 날짜가 정해진 장면은 3번의 시뮬레이터 모드에서 재현한다.
+Virtual Console 에는 날짜, 내비게이션 도착, 위치, 차량 속도, VIN 카드가 없다. 날짜와 도착은 앱의 시연 패널에서 넣는다. 여섯 날을 Virtual Console 카드와 시연 패널 버튼으로 재현하는 절차는 [`docs/DEMO_GUIDE.md`](docs/DEMO_GUIDE.md) 에 날마다 적었다.
 
 ### 3. 일반 Android 기기·에뮬레이터에서 실행 (시뮬레이터 모드)
 
@@ -162,6 +168,7 @@ app/src/main/java/com/naitae/connect
 ├─ core/model   데이터 모델(주제, 일정, 메모, 기록, 편지, 차)
 ├─ vehicle      차량 연결 인터페이스, SDK 호출 로그
 │  ├─ pleos     Pleos Connect SDK 어댑터(Vehicle, NaviHelper, TTS, STT, FusedLocation)
+│  ├─ demo      Pleos 모드의 시연 층(시연 시계, 도착 이벤트, 마이크 대신 넣는 말, 시연 패널)
 │  └─ sim       시뮬레이터와 가상 콘솔의 차
 ├─ data         JSON 파일 저장소, 가상 페르소나 데이터
 ├─ domain       브리핑, 메모, 이동 추적, 기록, 다시 보기, 편지, 이어받기, 나이테 계산
@@ -180,6 +187,7 @@ docs            구조, 플랫폼 조사 노트, SDK 시그니처, 시연 가이
 
 - 단위 테스트: 도메인 엔진(브리핑, 메모, 이동 추적, 기록, 다시 보기, 편지 연출, 이어받기, 나이테), JSON 저장소, 가상 데이터
 - 시나리오 테스트(`app/src/test/java/com/naitae/connect/e2e/`): 실제 앱 클래스를 시뮬레이터 플랫폼으로 띄워 여섯 날을 순서대로 진행하고, 화면 캡처를 `docs/screenshots/` 에 다시 만든다
+- Pleos 모드 시연 테스트(`PleosDemoE2eTest`, `DemoPlatformTest`, `DriverSeatIgnitionTest`): 차량 연결 인터페이스의 가짜 구현에 시연 층을 씌우고 실제 코디네이터를 돌려, 운전석 탑승 신호, 도착 뒤 다시 탔을 때의 "오늘을 남길까요?", 저녁 메모, 날짜 바꾸기와 VIN, 이어받기와 편지, 다시 실행 뒤 이어 가기를 확인한다
 
 ## 검증 상태
 
@@ -189,11 +197,12 @@ docs            구조, 플랫폼 조사 노트, SDK 시그니처, 시연 가이
 | 도메인 로직 | JVM 단위 테스트로 확인한다 |
 | 여섯 날의 시나리오 | 시뮬레이터 플랫폼에서 화면 장치 없이 처음부터 끝까지 실행해 확인한다. 방법과 결과는 [`docs/VERIFICATION.md`](docs/VERIFICATION.md) 에 있다 |
 | Pleos 어댑터(`vehicle/pleos/`) | Pleos 에뮬레이터와 실차에서 실행해 확인하지 않았다. SDK AAR 에서 추출한 시그니처는 [`docs/pleos-sdk-api/`](docs/pleos-sdk-api/) 에 있다 |
+| Pleos 모드의 탑승 신호와 시연 층(`vehicle/demo/`) | 운전석 착좌 판단 로직과 시연 절차를 차량 연결 인터페이스의 가짜 구현으로 JVM 에서 확인한다. Pleos 에뮬레이터에서 실행해 확인하지 않았다 |
 
 ## 데이터와 개인정보
 
 - 좌석은 착석 수만 읽고 기록한다. 누가 앉았는지는 읽지도 저장하지도 않는다. 차에서 말로 남긴 한마디에도 말한 사람을 저장하지 않는다.
-- 계정 원본은 서버 대신 앱 내부 저장소의 JSON 파일(`files/naitae.json`)로 대신한다. 앱 백업은 꺼 두었다(`allowBackup="false"`).
+- 계정 원본은 서버 대신 앱 내부 저장소의 JSON 파일(`files/naitae.json`)로 대신한다. Pleos 모드의 진행 상태(시연 날짜·시각, 이동 상태)는 같은 폴더의 `naitae-session.json` 에 둔다. 앱 백업은 꺼 두었다(`allowBackup="false"`).
 - 앱 코드에는 네트워크 호출이 없다. 음성은 차 안 엔진(`Mode.ON_DEVICE`)만 쓴다.
 - Pleos 모드의 SDK 호출 로그에는 VIN 을 앞 3자리와 끝 4자리만 남긴다.
 - 사진은 실제 사진 대신 주제의 장면 그림으로 대신한다. 카메라와 저장소 권한을 쓰지 않는다.

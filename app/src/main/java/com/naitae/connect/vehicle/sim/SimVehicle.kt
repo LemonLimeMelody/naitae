@@ -324,7 +324,6 @@ internal class SimVehicle(
         const val PROXIMITY_LEAD_MS = 400L
         const val ARRIVE_TO_PARK_MS = 700L
 
-        const val DEFAULT_DISTANCE_KM = 10f
         const val MIN_LAST_LEG_KM = 1f
         const val MINUTES_PER_KM = 1.5f
         const val BASE_TRIP_MINUTES = 4f
@@ -335,13 +334,7 @@ internal class SimVehicle(
         val DAY_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
         val SEAT_NAMES = listOf("운전석", "조수석", "뒷좌석 왼쪽", "뒷좌석 오른쪽")
 
-        fun distanceKmTo(place: Place): Float = when (place.name) {
-            "회사" -> 18f
-            "낚시터" -> 32f
-            "수목원" -> 41f
-            "마트" -> 6f
-            else -> DEFAULT_DISTANCE_KM
-        }
+        fun distanceKmTo(place: Place): Float = SeedData.demoDistanceKm(place)
 
         /** 날짜를 고른 직후의 차 상태: 시동 꺼짐, P, 그날에 맞는 좌석·주행거리·차 */
         fun stateFor(day: ScenarioDay, now: LocalDateTime): SimState {

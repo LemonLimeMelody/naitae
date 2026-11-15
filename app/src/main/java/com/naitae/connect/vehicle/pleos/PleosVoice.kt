@@ -34,6 +34,9 @@ import java.util.concurrent.atomic.AtomicInteger
  * TTS 와 STT 의 Mode · ErrorType · OnInitializeListener 는 이름이 같아서 Tts…/Stt… 별칭으로 가져온다.
  */
 
+/** 한국어 화자 4종(seoyoon · eunwoo · haeun · sanghyeok) 가운데 플랫폼 기본값 */
+private const val KOREAN_SPEAKER = "haeun"
+
 /** SDK 초기화가 실패한 뒤 다시 시도하기까지 두는 간격 */
 private const val INIT_RETRY_MS = 30_000L
 private const val INIT_TIMEOUT_MS = 5_000L
@@ -185,6 +188,11 @@ internal class PleosVoiceOutput(private val context: Context) : VoiceOutput {
         safeSdk("TextToSpeech.setLocale()") {
             created.setLocale(Locale.KOREA)
             SdkLog.api("TextToSpeech.setLocale(ko-KR)")
+        }
+        // 화자를 정하지 않으면 앱에 저장된 값이나 차의 설정을 따라가 한국어가 아닌 화자가 걸릴 수 있다. 한국어 기본 화자로 한 번 정해 둔다.
+        safeSdk("TextToSpeech.setSpeakerType()") {
+            created.setSpeakerType(KOREAN_SPEAKER)
+            SdkLog.api("TextToSpeech.setSpeakerType($KOREAN_SPEAKER)")
         }
         safeSdk("TextToSpeech.addEventListener()") {
             created.addEventListener(listener)

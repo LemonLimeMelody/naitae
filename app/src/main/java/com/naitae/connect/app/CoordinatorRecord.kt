@@ -49,6 +49,7 @@ internal fun NaitaeCoordinator.commitRecord(topicId: String) {
                 next
             }
             tracker.clearDraft()
+            saveSession()
             val record = created
             // 저장하는 사이 출발했거나 시동을 껐으면 화면은 그대로 둔다(기록은 남았다).
             if (record != null && session === memory && screen is Screen.RecordAsk) {
